@@ -139,7 +139,6 @@ static float max_temp_fet;
 static bool use_soft_start;
 static bool use_reverse_stop;
 static bool allow_high_speed_full_switch_faults;
-static bool disable_all_5_3_features;
 static float reverse_total_erpm;
 static RideState ride_state, new_ride_state;
 static float kp, ki, kd, kp_acc, ki_acc, kd_acc, kp_brk, ki_brk, kd_brk;
@@ -187,6 +186,30 @@ void biquad2_config(float Fc) {
 	bq2_a2 = bq2_a0;
 	bq2_b1 = 2 * (K * K - 1) * norm;
 	bq2_b2 = (1 - K / Q + K * K) * norm;
+}
+
+// Wiggle the motor a little bit at different frequencies
+// In case the frequency change stuff isn't safe
+// we can also wiggle the motor a bit (using 1A) without
+// changing the switching frequency
+static void play_tune(bool doChangeFreqs) {
+	float original_sw = mc_interface_get_configuration()->foc_f_sw;
+	float curr = 1;
+	int freqs[] = { 2093, 2637, 3135, 4186 };
+	for( unsigned int i = 0; i < sizeof(freqs)/sizeof(int); i++ ) {
+		if (doChangeFreqs)
+			mcpwm_foc_change_sw(freqs[i]);
+		mc_interface_set_current(curr);
+		chThdSleepMilliseconds(50);
+		mc_interface_set_current(0);
+		chThdSleepMilliseconds(10);
+		curr = -curr;
+		if (!doChangeFreqs && i)	// no tune? Limit to 1 back and forth wiggle
+			break;
+	}
+	//go back to original switching frequency
+	if (doChangeFreqs)
+		mcpwm_foc_change_sw((int)original_sw);
 }
 
 void app_balance_configure(balance_config *conf, imu_config *conf2) {
@@ -290,12 +313,6 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 		integral_min = -20000.0; // braking
 	}
 
-	disable_all_5_3_features = (balance_conf.deadzone != 0);
-	if (disable_all_5_3_features) {
-		use_soft_start = false;
-		use_reverse_stop = false;
-	}
-
 	tiltback_constant = 0;
 	tiltback_erpmbased = 0;
 	tiltback_constant_erpm = 99999;
@@ -353,25 +370,17 @@ void reset_vars(void){
 	max_temp_fet = mc_interface_get_configuration()->l_temp_fet_start;
 	new_ride_state = ride_state = RIDE_OFF;
 
-	if (disable_all_5_3_features) {
-		kp = kp_acc;
-		ki = ki_acc;
-		kd = kd_acc;
-	}
-	else {
-		if (use_soft_start) {
-			// Soft start
-			// minimum values (even 0,0,0 is possible) for soft start:
-			kp = 1;
-			ki = 0;
-			kd = 100;
-		}
-		else {
-			// Normal start / quick-start
-			kp = kp_acc / 2;
-			ki = ki_acc / 2;
-			kd = kd_acc / 2;
-		}
+	if (use_soft_start) {
+		// Soft start
+		// minimum values (even 0,0,0 is possible) for soft start:
+		kp = 1;
+		ki = 0;
+		kd = 100;
+	} else {
+		// Normal start / quick-start
+		kp = kp_acc / 2;
+		ki = ki_acc / 2;
+		kd = kd_acc / 2;
 	}
 
 	exp_g_max = 0;
@@ -971,6 +980,10 @@ static THD_FUNCTION(balance_thread, arg) {
 				state = FAULT_STARTUP; // Trigger a fault so we need to meet start conditions to start
 				log_balance_state = state;
 
+				if (balance_conf.deadzone > 0) {
+					play_tune(balance_conf.deadzone == 1);
+				}
+
 				// Let the rider know that the board is ready
 				beep_on(1);
 				chThdSleepMilliseconds(100);
@@ -1009,11 +1022,9 @@ static THD_FUNCTION(balance_thread, arg) {
 				calculate_setpoint_target();
 				calculate_setpoint_interpolated();
 				setpoint = setpoint_target_interpolated;
-				if (disable_all_5_3_features == false) {
-					if (setpointAdjustmentType == TILTBACK) {
-						apply_torquetilt();
-						apply_turntilt();
-					}
+				if (setpointAdjustmentType == TILTBACK) {
+					apply_torquetilt();
+					apply_turntilt();
 				}
 
 				// Do PID maths
@@ -1032,35 +1043,33 @@ static THD_FUNCTION(balance_thread, arg) {
 					derivative = d_pt1_state;
 				}
 
-				if (disable_all_5_3_features == false) {
-					// Limit integral
-					integral = fminf(integral, integral_max);
-					integral = fmaxf(integral, integral_min);
+				// Limit integral
+				integral = fminf(integral, integral_max);
+				integral = fmaxf(integral, integral_min);
 
-					// Switch between breaking PIDs and acceleration PIDs
-					float kp_target, ki_target, kd_target;
-					if (SIGN(pid_value) == SIGN(REVERSE_ERPM_REPORTING * erpm)) {
-						// braking
-						kp_target = kp_brk;
-						ki_target = ki_brk;
-						kd_target = kd_brk;
-					}
-					else {
-						// acceleration
-						kp_target = kp_acc;
-						ki_target = ki_acc;
-						kd_target = kd_acc;
-					}
-					if (setpointAdjustmentType == REVERSESTOP) {
-						kp_target = 2;
-						integral = 0;
-					}
-
-					// Use filtering to avoid sudden changes in PID values
-					kp = kp * 0.997 + kp_target * 0.003;
-					ki = ki * 0.997 + ki_target * 0.003;
-					kd = kd * 0.997 + kd_target * 0.003;
+				// Switch between breaking PIDs and acceleration PIDs
+				float kp_target, ki_target, kd_target;
+				if (SIGN(pid_value) == SIGN(REVERSE_ERPM_REPORTING * erpm)) {
+					// braking
+					kp_target = kp_brk;
+					ki_target = ki_brk;
+					kd_target = kd_brk;
 				}
+				else {
+					// acceleration
+					kp_target = kp_acc;
+					ki_target = ki_acc;
+					kd_target = kd_acc;
+				}
+				if (setpointAdjustmentType == REVERSESTOP) {
+					kp_target = 2;
+					integral = 0;
+				}
+
+				// Use filtering to avoid sudden changes in PID values
+				kp = kp * 0.997 + kp_target * 0.003;
+				ki = ki * 0.997 + ki_target * 0.003;
+				kd = kd * 0.997 + kd_target * 0.003;
 
 				if (use_soft_start && (setpointAdjustmentType == CENTERING)) {
 					// soft-start
