@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+
+FWPATH="../"
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+#################### Cheap_FOCer_2 ########################
+
+COPYDIR=Cheap_FOCer_2
+mkdir -p $COPYDIR
+rm -f $COPYDIR/*
+
+# default
+cd $FWPATH
+touch conf_general.h
+make -j8 build_args='-DHW_SOURCE=\"hw_Cheap_FOCer_2.c\" -DHW_HEADER=\"hw_Cheap_FOCer_2.h\"' USE_VERBOSE_COMPILE=no
+cd $DIR
+cp $FWPATH/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
+cp $FWPATH/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_CF2_37n_`date "+%m%d"`.bin
+
+# Clean
+cd $FWPATH
+make clean
+cd $DIR
+
+#################### SPEsc ########################
+
+COPYDIR=SPEsc
+mkdir -p $COPYDIR
+rm -f $COPYDIR/*
+
+# default
+cd $FWPATH
+touch conf_general.h
+make -j8 build_args='-DHW_SOURCE=\"hw_spesc.c\" -DHW_HEADER=\"hw_spesc.h\"' USE_VERBOSE_COMPILE=no
+cd $DIR
+cp $FWPATH/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
+cp $FWPATH/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_SPEsc_37n_`date "+%m%d"`.bin
+
+# Clean
+cd $FWPATH
+make clean
+cd $DIR
