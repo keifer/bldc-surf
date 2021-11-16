@@ -1,0 +1,37 @@
+#!/bin/bash
+set -xe
+
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+#################### Cheap_FOCer_2 ########################
+# Clean
+cd $DIR
+make clean
+
+COPYDIR=build_all/Cheap_FOCer_2
+mkdir -p $DIR/$COPYDIR
+rm -f $DIR/$COPYDIR/*
+
+# default
+touch conf_general.h
+make -j8 build_args='-DHW_SOURCE=\"hw_Cheap_FOCer_2.c\" -DHW_HEADER=\"hw_Cheap_FOCer_2.h\"' USE_VERBOSE_COMPILE=no
+cp -v $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
+cp -v $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_CF2_37n_`date "+%m%d"`.bin
+
+#################### SPEsc ########################
+# Clean
+cd $DIR
+make clean
+
+COPYDIR=build_all/SPEsc
+mkdir -p $DIR/$COPYDIR
+rm -f $DIR/$COPYDIR/*
+
+# default
+touch conf_general.h
+make -j8 build_args='-DHW_SOURCE=\"hw_spesc.c\" -DHW_HEADER=\"hw_spesc.h\"' USE_VERBOSE_COMPILE=no
+cd $DIR
+cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
+cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_SPEsc_37n_`date "+%m%d"`.bin
+
+

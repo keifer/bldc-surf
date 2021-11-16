@@ -1,0 +1,14 @@
+#!/bin/bash
+set -x
+
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+FWDIR=$DIR/build_all
+
+FWs=(\
+"Cheap_FOCer_2/VESC_CF2_37n_1116.bin" \
+"SPEsc/VESC_SPEsc_37n_1116.bin" \
+)
+
+for fw in "${FWs[@]}"; do
+	adb push $FWDIR/$fw "storage/emulated/0/fw/"
+done
