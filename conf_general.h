@@ -171,9 +171,10 @@
 //#define HW_HEADER "hw_100_500.h"
 
 
-#define HW_SOURCE "hw_spesc.c"
-#define HW_HEADER "hw_spesc.h"
-
+//#define HW_SOURCE "hw_spesc.c"
+//#define HW_HEADER "hw_spesc.h"
+#define HW_SOURCE "hw_spesc_v2.c"
+#define HW_HEADER "hw_spesc_v2.h"
 
 #endif
 

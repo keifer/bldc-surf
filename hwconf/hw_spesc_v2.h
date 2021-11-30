@@ -20,21 +20,36 @@
 #ifndef HW_SPESC
 #define HW_SPESC
 
-#define HW_NAME					"SPEsc"
+#define HW_NAME					"SPEsc V2"
 #define INVERTED_SHUNT_POLARITY				
 
 // HW properties
 #define HW_HAS_3_SHUNTS
 #define HW_USE_INTERNAL_RC
-#define HW_DEAD_TIME_NSEC		660.0
+#define HW_DEAD_TIME_NSEC		760.0
 // Macros
-
-
 #define LED_GREEN_ON()			palSetPad(GPIOB, 0)
 #define LED_GREEN_OFF()			palClearPad(GPIOB, 0)
 #define LED_RED_ON()			palSetPad(GPIOB, 1)
 #define LED_RED_OFF()			palClearPad(GPIOB, 1)
-
+//Buzzer 
+//Check  https://github.com/surfdado/bldc
+#define HAS_EXT_BUZZER			1
+#define EXT_BUZZER_GPIO GPIOC
+#define EXT_BUZZER_PIN  13
+#define EXT_BUZZER_ON()			palSetPad(EXT_BUZZER_GPIO, EXT_BUZZER_PIN)
+#define EXT_BUZZER_OFF()		palClearPad(EXT_BUZZER_GPIO, EXT_BUZZER_PIN)
+//COB LED Driver 
+        
+// #define HW_HAS_COB_LED       1
+// #define COB0_LED_GPIO GPIOB
+// #define COB0_LED_PIN 7
+// #define COB1_LED_GPIO GPIOB
+// #define COB1_LED_PIN 5
+// #define COB0_LED_ON()       palSetPad(COB0_LED_GPIO, COB0_LED_PIN)
+// #define COB0_LED_OFF()      palClearPad(COB0_LED_GPIO, COB0_LED_PIN)
+// #define COB1_LED_ON()       palSetPad(COB1_LED_GPIO, COB0_LED_PIN)
+// #define COB1_LED_OFF()      palClearPad(COB1_LED_GPIO, COB0_LED_PIN)
 
 /*
  * ADC Vector
@@ -170,14 +185,14 @@
 
 
 // NRF pins
-#define NRF_PORT_CSN			GPIOB
-#define NRF_PIN_CSN				12
-#define NRF_PORT_SCK			GPIOB
-#define NRF_PIN_SCK				4
-#define NRF_PORT_MOSI			GPIOB
-#define NRF_PIN_MOSI			3
-#define NRF_PORT_MISO			GPIOD
-#define NRF_PIN_MISO			2
+// #define NRF_PORT_CSN			GPIOB
+// #define NRF_PIN_CSN				12
+// #define NRF_PORT_SCK			GPIOB
+// #define NRF_PIN_SCK				4
+// #define NRF_PORT_MOSI			GPIOB
+// #define NRF_PIN_MOSI			3
+// #define NRF_PORT_MISO			GPIOD
+// #define NRF_PIN_MISO			2
 
 
 // SPI pins
@@ -265,9 +280,9 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT			-275.0, 275.0
-#define HW_LIM_CURRENT_IN		-80.0, 140.0
-#define HW_LIM_CURRENT_ABS		0.0, 400.0
+#define HW_LIM_CURRENT			-150.0, 150.0
+#define HW_LIM_CURRENT_IN		-80.0, 100.0
+#define HW_LIM_CURRENT_ABS		0.0, 350.0
 #define HW_LIM_VIN			24.0, 84.0
 #define HW_LIM_ERPM			-400e3, 400e3
 #define HW_LIM_DUTY_MIN			0.0, 0.1
