@@ -839,34 +839,36 @@ static void update_lights(void){
 	ride_state = new_ride_state;
 	switch (ride_state) {
 	case RIDE_OFF:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_OFF();
-		BRAKE_LIGHT_OFF();
+
+		LIGHT_FRONT_OFF();
+		LIGHT_REAR_OFF();
 		break;
 	case RIDE_IDLE:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_ON();
-		BRAKE_LIGHT_OFF();
+
+		LIGHT_FRONT_ON();
+		LIGHT_REAR_ON();
+
 		break;
 	case RIDE_FORWARD:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_OFF();
-		BRAKE_LIGHT_OFF();
+
+		LIGHT_FRONT_ON();
+		LIGHT_REAR_OFF();
+		
 		break;
 	case RIDE_REVERSE:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
-		BRAKE_LIGHT_OFF();
+
+		LIGHT_FRONT_OFF();
+		LIGHT_REAR_ON();
+
 		break;
 	case BRAKE_FORWARD:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_OFF();
-		BRAKE_LIGHT_ON();
+
+		LIGHT_FRONT_ON();
+		
 		break;
 	case BRAKE_REVERSE:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
-		BRAKE_LIGHT_ON();
+	
+		LIGHT_REAR_ON();
 		break;
 	}
 }

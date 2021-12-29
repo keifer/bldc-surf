@@ -50,44 +50,20 @@ void hw_init_gpio(void) {
 	palSetPadMode(GPIOB, 1,
 			PAL_MODE_OUTPUT_PUSHPULL |
 			PAL_STM32_OSPEED_HIGHEST);
-	// BUZZER
-	palSetPadMode(EXT_BUZZER_GPIO, EXT_BUZZER_PIN,
+	// External Buzzer (using servo pin!)
+	palSetPadMode(GPIOB, 6,
 			PAL_MODE_OUTPUT_PUSHPULL |
 			PAL_STM32_OSPEED_HIGHEST);
 	EXT_BUZZER_OFF();
-
-	//#ifdef HW_HAS_COB_LED
-	// palSetPadMode(COB0_LED_GPIO, COB0_LED_PIN,
-	// 		PAL_MODE_OUTPUT_PUSHPULL |
-	// 		PAL_STM32_OSPEED_HIGHEST);
-	// palSetPadMode(COB1_LED_GPIO, COB1_LED_PIN,
-	// 		PAL_MODE_OUTPUT_PUSHPULL |
-	// 		PAL_STM32_OSPEED_HIGHEST);
-	
-	// COB0_LED_OFF();
-	
-	// COB1_LED_OFF();
-
-	//#endif
-
-// #ifdef HW60_VEDDER_FIRST_PCB
-// 	palSetPadMode(GPIOB, 6,
-// 			PAL_MODE_OUTPUT_PUSHPULL |
-// 			PAL_STM32_OSPEED_HIGHEST);
-// #else
-// 	palSetPadMode(GPIOB, 5,
-// 			PAL_MODE_OUTPUT_PUSHPULL |
-// 			PAL_STM32_OSPEED_HIGHEST);
-// #endif
-
-	//ENABLE_GATE();
-
-	// Current filter
-	//palSetPadMode(GPIOD, 2,
-	//		PAL_MODE_OUTPUT_PUSHPULL |
-	//		PAL_STM32_OSPEED_HIGHEST);
-
-	//CURRENT_FILTER_OFF();
+	// Front/RearLights
+	palSetPadMode(GPIOB, 5,
+			PAL_MODE_OUTPUT_PUSHPULL |
+			PAL_STM32_OSPEED_HIGHEST);
+	LIGHT_FRONT_ON();
+	palSetPadMode(GPIOB, 7,
+			PAL_MODE_OUTPUT_PUSHPULL |
+			PAL_STM32_OSPEED_HIGHEST);
+	LIGHT_REAR_ON();
 
 	// GPIOA Configuration: Channel 1 to 3 as alternate function push-pull
 	palSetPadMode(GPIOA, 8, PAL_MODE_ALTERNATE(GPIO_AF_TIM1) |

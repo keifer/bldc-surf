@@ -271,7 +271,7 @@
 /*
  * Optional external LEDs driven by GPIO pins
  */
-#ifndef LIGHT_FWD_ON
+#ifndef LIGHT_FRONT_ON
 #define LIGHT_FWD_ON() {}
 #define LIGHT_FWD_OFF() {}
 #define LIGHT_BACK_ON() {}

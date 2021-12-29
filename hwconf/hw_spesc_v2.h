@@ -32,24 +32,18 @@
 #define LED_GREEN_OFF()			palClearPad(GPIOB, 0)
 #define LED_RED_ON()			palSetPad(GPIOB, 1)
 #define LED_RED_OFF()			palClearPad(GPIOB, 1)
-//Buzzer 
-//Check  https://github.com/surfdado/bldc
+
+//uses servo pin for buzzer
 #define HAS_EXT_BUZZER			1
-#define EXT_BUZZER_GPIO GPIOC
-#define EXT_BUZZER_PIN  13
-#define EXT_BUZZER_ON()			palSetPad(EXT_BUZZER_GPIO, EXT_BUZZER_PIN)
-#define EXT_BUZZER_OFF()		palClearPad(EXT_BUZZER_GPIO, EXT_BUZZER_PIN)
-//COB LED Driver 
+#define EXT_BUZZER_ON()			palSetPad(GPIOB, 6)
+#define EXT_BUZZER_OFF()		palClearPad(GPIOB, 6)
+//COB LED  
         
-// #define HW_HAS_COB_LED       1
-// #define COB0_LED_GPIO GPIOB
-// #define COB0_LED_PIN 7
-// #define COB1_LED_GPIO GPIOB
-// #define COB1_LED_PIN 5
-// #define COB0_LED_ON()       palSetPad(COB0_LED_GPIO, COB0_LED_PIN)
-// #define COB0_LED_OFF()      palClearPad(COB0_LED_GPIO, COB0_LED_PIN)
-// #define COB1_LED_ON()       palSetPad(COB1_LED_GPIO, COB0_LED_PIN)
-// #define COB1_LED_OFF()      palClearPad(COB1_LED_GPIO, COB0_LED_PIN)
+#define LIGHT_FRONT_ON()			palSetPad(GPIOB, 5)
+#define LIGHT_FRONT_OFF()			palClearPad(GPIOB, 5)
+#define LIGHT_REAR_ON()			palSetPad(GPIOB, 7)
+#define LIGHT_REAR_OFF()		palClearPad(GPIOB, 7)
+
 
 /*
  * ADC Vector
