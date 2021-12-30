@@ -271,11 +271,11 @@
 /*
  * Optional external LEDs driven by GPIO pins
  */
-#ifndef LIGHT_FRONT_ON
-#define LIGHT_FWD_ON() {}
-#define LIGHT_FWD_OFF() {}
-#define LIGHT_BACK_ON() {}
-#define LIGHT_BACK_OFF() {}
+#ifndef HAS_EXT_LIGHT
+#define LIGHT_FRONT_OFF() {}
+#define LIGHT_REAR_OFF() {}
+#define LIGHT_FRONT_ON() {}
+#define LIGHT_REAR_ON() {}
 #endif
 
 #ifndef BRAKE_LIGHT_ON

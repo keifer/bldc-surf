@@ -838,37 +838,36 @@ void apply_turntilt(void){
 static void update_lights(void){
 	ride_state = new_ride_state;
 	switch (ride_state) {
+		
 	case RIDE_OFF:
-
-		LIGHT_FRONT_OFF();
-		LIGHT_REAR_OFF();
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_OFF();
+		BRAKE_LIGHT_OFF();
 		break;
 	case RIDE_IDLE:
-
-		LIGHT_FRONT_ON();
-		LIGHT_REAR_ON();
-
+		LIGHT_FWD_ON();
+		LIGHT_BACK_ON();
+		BRAKE_LIGHT_OFF();
 		break;
 	case RIDE_FORWARD:
-
-		LIGHT_FRONT_ON();
-		LIGHT_REAR_OFF();
-		
+		LIGHT_FWD_ON();
+		LIGHT_BACK_OFF();
+		BRAKE_LIGHT_OFF();
 		break;
 	case RIDE_REVERSE:
-
-		LIGHT_FRONT_OFF();
-		LIGHT_REAR_ON();
-
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_ON();
+		BRAKE_LIGHT_OFF();
 		break;
 	case BRAKE_FORWARD:
-
-		LIGHT_FRONT_ON();
-		
+		LIGHT_FWD_ON();
+		LIGHT_BACK_OFF();
+		BRAKE_LIGHT_ON();
 		break;
 	case BRAKE_REVERSE:
-	
-		LIGHT_REAR_ON();
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_ON();
+		BRAKE_LIGHT_ON();
 		break;
 	}
 }
