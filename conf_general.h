@@ -271,17 +271,17 @@
 /*
  * Optional external LEDs driven by GPIO pins
  */
-#ifndef HAS_EXT_LIGHT
-#define LIGHT_FRONT_OFF() {}
-#define LIGHT_REAR_OFF() {}
-#define LIGHT_FRONT_ON() {}
-#define LIGHT_REAR_ON() {}
-#endif
+// #ifndef HAS_EXT_LIGHT
+// #define LIGHT_FRONT_OFF() {}
+// #define LIGHT_REAR_OFF() {}
+// #define LIGHT_FRONT_ON() {}
+// #define LIGHT_REAR_ON() {}
+// #endif
 
-#ifndef BRAKE_LIGHT_ON
-#define BRAKE_LIGHT_ON() {}
-#define BRAKE_LIGHT_OFF() {}
-#endif
+//#ifndef BRAKE_LIGHT_ON
+//#define BRAKE_LIGHT_ON() {}
+//#define BRAKE_LIGHT_OFF() {}
+//#endif
 
 #ifndef REVERSE_ERPM_REPORTING
 #define REVERSE_ERPM_REPORTING 1
