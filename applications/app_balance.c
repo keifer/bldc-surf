@@ -20,11 +20,11 @@
 #include "conf_general.h"
 
 #include "app.h"
-#include "ch.h" // ChibiOS
-#include "hal.h" // ChibiOS HAL
+#include "ch.h"			  // ChibiOS
+#include "hal.h"		  // ChibiOS HAL
 #include "mc_interface.h" // Motor control functions
-#include "hw.h" // Pin mapping on this hardware
-#include "timeout.h" // To reset the timeout
+#include "hw.h"			  // Pin mapping on this hardware
+#include "timeout.h"	  // To reset the timeout
 #include "commands.h"
 #include "imu/imu.h"
 #include "imu/ahrs.h"
@@ -34,7 +34,6 @@
 #include "terminal.h"
 #include "mcpwm_foc.h"
 #include "buzzer.h"
-
 
 #include <math.h>
 #include <stdio.h>
@@ -46,7 +45,8 @@
 #define ACCEL_ARRAY_SIZE 40
 
 // Data type (Value 5 was removed, and can be reused at a later date, but i wanted to preserve the current value's numbers for UIs)
-typedef enum {
+typedef enum
+{
 	STARTUP = 0,
 	RUNNING = 1,
 	RUNNING_TILTBACK_DUTY = 2,
@@ -61,7 +61,8 @@ typedef enum {
 	FAULT_REVERSE = 12
 } BalanceState;
 
-typedef enum {
+typedef enum
+{
 	CENTERING = 0,
 	REVERSESTOP,
 	TILTBACK_NONE,
@@ -70,21 +71,34 @@ typedef enum {
 	TILTBACK_LV,
 } SetpointAdjustmentType;
 
-typedef enum {
+typedef enum
+{
 	OFF = 0,
 	HALF,
 	ON
 } SwitchState;
 
-typedef struct{
+typedef struct
+{
 	float a0, a1, a2, b1, b2;
 	float z1, z2;
 } Biquad;
 
-typedef enum {
+typedef enum
+{
 	BQ_LOWPASS,
 	BQ_HIGHPASS
 } BiquadType;
+
+typedef enum
+{
+	RIDE_OFF = 0,
+	RIDE_IDLE = 1,
+	RIDE_FORWARD,
+	RIDE_REVERSE,
+	BRAKE_FORWARD,
+	BRAKE_REVERSE
+} RideState;
 
 // Balance thread
 static THD_FUNCTION(balance_thread, arg);
@@ -179,7 +193,7 @@ static systime_t brake_timeout;
 static float accelhist[ACCEL_ARRAY_SIZE];
 static int accelidx;
 static float accelavg;
-
+static RideState ride_state, new_ride_state;
 // Lock
 static int lock_state;
 static bool is_locked;
@@ -203,22 +217,26 @@ static void app_balance_experiment(void);
 static void check_lock(void);
 
 // Utility Functions
-float biquad_process(Biquad *biquad, float in) {
-    float out = in * biquad->a0 + biquad->z1;
-    biquad->z1 = in * biquad->a1 + biquad->z2 - biquad->b1 * out;
-    biquad->z2 = in * biquad->a2 - biquad->b2 * out;
-    return out;
+float biquad_process(Biquad *biquad, float in)
+{
+	float out = in * biquad->a0 + biquad->z1;
+	biquad->z1 = in * biquad->a1 + biquad->z2 - biquad->b1 * out;
+	biquad->z2 = in * biquad->a2 - biquad->b2 * out;
+	return out;
 }
-void biquad_config(Biquad *biquad, BiquadType type, float Fc) {
-	float K = tanf(M_PI * Fc);	// -0.0159;
-	float Q = 0.5; // maximum sharpness (0.5 = maximum smoothness)
+void biquad_config(Biquad *biquad, BiquadType type, float Fc)
+{
+	float K = tanf(M_PI * Fc); // -0.0159;
+	float Q = 0.5;			   // maximum sharpness (0.5 = maximum smoothness)
 	float norm = 1 / (1 + K / Q + K * K);
-	if (type == BQ_LOWPASS) {
+	if (type == BQ_LOWPASS)
+	{
 		biquad->a0 = K * K * norm;
 		biquad->a1 = 2 * biquad->a0;
 		biquad->a2 = biquad->a0;
 	}
-	else if (type == BQ_HIGHPASS) {
+	else if (type == BQ_HIGHPASS)
+	{
 		biquad->a0 = 1 * norm;
 		biquad->a1 = -2 * biquad->a0;
 		biquad->a2 = biquad->a0;
@@ -226,7 +244,8 @@ void biquad_config(Biquad *biquad, BiquadType type, float Fc) {
 	biquad->b1 = 2 * (K * K - 1) * norm;
 	biquad->b2 = (1 - K / Q + K * K) * norm;
 }
-void biquad_reset(Biquad *biquad) {
+void biquad_reset(Biquad *biquad)
+{
 	biquad->z1 = 0;
 	biquad->z2 = 0;
 }
@@ -235,11 +254,13 @@ void biquad_reset(Biquad *biquad) {
 // In case the frequency change stuff isn't safe
 // we can also wiggle the motor a bit (using 1A) without
 // changing the switching frequency
-static void play_tune(bool doChangeFreqs) {
+static void play_tune(bool doChangeFreqs)
+{
 	float original_sw = mc_interface_get_configuration()->foc_f_zv;
 	float curr = 1;
-	int freqs[] = { 2093, 2637, 3135, 4186 };
-	for( unsigned int i = 0; i < sizeof(freqs)/sizeof(int); i++ ) {
+	int freqs[] = {2093, 2637, 3135, 4186};
+	for (unsigned int i = 0; i < sizeof(freqs) / sizeof(int); i++)
+	{
 		if (doChangeFreqs)
 			mcpwm_foc_change_sw(freqs[i]);
 		mc_interface_set_current(curr);
@@ -247,7 +268,7 @@ static void play_tune(bool doChangeFreqs) {
 		mc_interface_set_current(0);
 		chThdSleepMilliseconds(10);
 		curr = -curr;
-		if (!doChangeFreqs && i)	// no tune? Limit to 1 back and forth wiggle
+		if (!doChangeFreqs && i) // no tune? Limit to 1 back and forth wiggle
 			break;
 	}
 	//go back to original switching frequency
@@ -256,13 +277,14 @@ static void play_tune(bool doChangeFreqs) {
 }
 
 // Exposed Functions
-void app_balance_configure(balance_config *conf, imu_config *conf2) {
+void app_balance_configure(balance_config *conf, imu_config *conf2)
+{
 	balance_conf = *conf;
 	imu_conf = *conf2;
 	// Set calculated values from config
 	loop_time = US2ST((int)((1000.0 / balance_conf.hertz) * 1000.0));
 
-	motor_timeout = ((1000.0 / balance_conf.hertz)/1000.0) * 20; // Times 20 for a nice long grace period
+	motor_timeout = ((1000.0 / balance_conf.hertz) / 1000.0) * 20; // Times 20 for a nice long grace period
 
 	startup_step_size = balance_conf.startup_speed / balance_conf.hertz;
 	tiltback_duty_step_size = balance_conf.tiltback_duty_speed / balance_conf.hertz;
@@ -289,15 +311,18 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	reverse_tolerance = 50000;
 	reverse_stop_step_size = 100.0 / balance_conf.hertz;
 	float startup_speed = balance_conf.startup_speed;
-	int ss = (int) startup_speed;
+	int ss = (int)startup_speed;
 	float ss_rest = startup_speed - ss;
-	if ((ss_rest > 0.09) && (ss_rest < 0.11)) {
+	if ((ss_rest > 0.09) && (ss_rest < 0.11))
+	{
 		use_reverse_stop = true;
 	}
-	else if ((ss_rest > 0.19) && (ss_rest < 0.21)) {
+	else if ((ss_rest > 0.19) && (ss_rest < 0.21))
+	{
 		start_counter_clicks_max = 0;
 	}
-	else if ((ss_rest > 0.29) && (ss_rest < 0.31)) {
+	else if ((ss_rest > 0.29) && (ss_rest < 0.31))
+	{
 		start_counter_clicks_max = 0;
 		use_reverse_stop = true;
 	}
@@ -327,7 +352,7 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 		shedfactor = 0.98;
 
 	// Feature: Turntilt
-	yaw_aggregate_target = balance_conf.yaw_ki;			// borrow yaw_ki for aggregate yaw-change target
+	yaw_aggregate_target = balance_conf.yaw_ki; // borrow yaw_ki for aggregate yaw-change target
 	tuntilt_boost_per_erpm = (float)balance_conf.turntilt_erpm_boost / 100.0 / (float)balance_conf.turntilt_erpm_boost_end;
 	cutback_enable = true;
 	cutback_minspeed = 2000;
@@ -361,21 +386,24 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	integral_tt_impact_uphill = fmaxf(integral_tt_impact_uphill, 0.0);
 
 	// Init Filters
-	if(balance_conf.loop_time_filter > 0){
-		loop_overshoot_alpha = 2*M_PI*((float)1/balance_conf.hertz)*balance_conf.loop_time_filter/(2*M_PI*((float)1/balance_conf.hertz)*balance_conf.loop_time_filter+1);
+	if (balance_conf.loop_time_filter > 0)
+	{
+		loop_overshoot_alpha = 2 * M_PI * ((float)1 / balance_conf.hertz) * balance_conf.loop_time_filter / (2 * M_PI * ((float)1 / balance_conf.hertz) * balance_conf.loop_time_filter + 1);
 	}
 
 	// Use only pt1 lowpass filter for DTerm (limited to 1..30, default to 10)
 	float dt_filter_freq = 10;
-	if(balance_conf.kd_pt1_lowpass_frequency >= 1){
+	if (balance_conf.kd_pt1_lowpass_frequency >= 1)
+	{
 		dt_filter_freq = balance_conf.kd_pt1_lowpass_frequency;
 	}
-	if (dt_filter_freq > 30){
+	if (dt_filter_freq > 30)
+	{
 		dt_filter_freq = 10;
 	}
 	float dT = 1.0 / balance_conf.hertz;
-	float RC = 1.0 / ( 2.0 * M_PI * dt_filter_freq);
-	d_pt1_lowpass_k =  dT / (RC + dT);
+	float RC = 1.0 / (2.0 * M_PI * dt_filter_freq);
+	d_pt1_lowpass_k = dT / (RC + dT);
 
 	// Torquetilt Current Biquad
 	float tt_filter = balance_conf.torquetilt_filter;
@@ -388,7 +416,7 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 
 	// Feature: PID Toning
 	center_boost_angle = balance_conf.booster_angle;
-	center_boost_kp_adder = (balance_conf.booster_ramp / 3.5 * kp_acc)  - kp_acc; // scaled to match configured P
+	center_boost_kp_adder = (balance_conf.booster_ramp / 3.5 * kp_acc) - kp_acc; // scaled to match configured P
 	if (center_boost_kp_adder < 0)
 		center_boost_kp_adder = 1;
 	if (center_boost_angle > 3)
@@ -400,7 +428,8 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	accel_boost_threshold2 = BOOST_THRESHOLD2;
 	accel_boost_intensity = BOOST_INTENSITY;
 	if ((app_get_configuration()->app_nrf_conf.retry_delay == NRF_RETR_DELAY_3750US) &&
-		(app_get_configuration()->app_nrf_conf.retries == 13)) {
+		(app_get_configuration()->app_nrf_conf.retries == 13))
+	{
 		// NRF config is used to customize boost parameters
 		accel_boost_threshold = (float)app_get_configuration()->app_nrf_conf.address[0];
 		accel_boost_threshold2 = (float)app_get_configuration()->app_nrf_conf.address[1];
@@ -441,9 +470,12 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 
 	// Variable nose angle adjustment / tiltback (setting is per 1000erpm, convert to per erpm)
 	tiltback_variable = balance_conf.tiltback_variable / 1000;
-	if (tiltback_variable > 0) {
+	if (tiltback_variable > 0)
+	{
 		tiltback_variable_max_erpm = fabsf(balance_conf.tiltback_variable_max / tiltback_variable);
-	} else {
+	}
+	else
+	{
 		tiltback_variable_max_erpm = 100000;
 	}
 
@@ -460,14 +492,29 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	mc_current_min = mc_interface_get_configuration()->l_current_min;
 	mc_max_temp_fet = mc_interface_get_configuration()->l_temp_fet_start - 2;
 
-	switch (app_get_configuration()->shutdown_mode) {
-	case SHUTDOWN_MODE_OFF_AFTER_10S: inactivity_timeout = 10; break;
-	case SHUTDOWN_MODE_OFF_AFTER_1M: inactivity_timeout = 60; break;
-	case SHUTDOWN_MODE_OFF_AFTER_5M: inactivity_timeout = 60 * 5; break;
-	case SHUTDOWN_MODE_OFF_AFTER_10M: inactivity_timeout = 60 * 10; break;
-	case SHUTDOWN_MODE_OFF_AFTER_30M: inactivity_timeout = 60 * 30; break;
-	case SHUTDOWN_MODE_OFF_AFTER_1H: inactivity_timeout = 60 * 60; break;
-	case SHUTDOWN_MODE_OFF_AFTER_5H: inactivity_timeout = 60 * 60 * 5; break;
+	switch (app_get_configuration()->shutdown_mode)
+	{
+	case SHUTDOWN_MODE_OFF_AFTER_10S:
+		inactivity_timeout = 10;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_1M:
+		inactivity_timeout = 60;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_5M:
+		inactivity_timeout = 60 * 5;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_10M:
+		inactivity_timeout = 60 * 10;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_30M:
+		inactivity_timeout = 60 * 30;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_1H:
+		inactivity_timeout = 60 * 60;
+		break;
+	case SHUTDOWN_MODE_OFF_AFTER_5H:
+		inactivity_timeout = 60 * 60 * 5;
+		break;
 	default:
 		inactivity_timeout = 0;
 	}
@@ -478,7 +525,8 @@ void app_balance_configure(balance_config *conf, imu_config *conf2) {
 	is_locked = balance_conf.multi_esc;
 }
 
-void app_balance_start(void) {
+void app_balance_start(void)
+{
 	// First start only, override state to startup
 	state = STARTUP;
 	log_balance_state = state;
@@ -502,8 +550,10 @@ void app_balance_start(void) {
 	app_thread = chThdCreateStatic(balance_thread_wa, sizeof(balance_thread_wa), NORMALPRIO, balance_thread, NULL);
 }
 
-void app_balance_stop(void) {
-	if(app_thread != NULL){
+void app_balance_stop(void)
+{
+	if (app_thread != NULL)
+	{
 		chThdTerminate(app_thread);
 		chThdWait(app_thread);
 	}
@@ -512,42 +562,54 @@ void app_balance_stop(void) {
 	terminal_unregister_callback(terminal_sample);
 }
 
-float app_balance_get_pid_output(void) {
+float app_balance_get_pid_output(void)
+{
 	return pid_value;
 }
-float app_balance_get_pitch_angle(void) {
+float app_balance_get_pitch_angle(void)
+{
 	return pitch_angle;
 }
-float app_balance_get_roll_angle(void) {
+float app_balance_get_roll_angle(void)
+{
 	return roll_angle;
 }
-uint32_t app_balance_get_diff_time(void) {
+uint32_t app_balance_get_diff_time(void)
+{
 	return ST2US(diff_time);
 }
-float app_balance_get_motor_current(void) {
+float app_balance_get_motor_current(void)
+{
 	return motor_current;
 }
-uint16_t app_balance_get_state(void) {
+uint16_t app_balance_get_state(void)
+{
 	return state;
 }
-uint16_t app_balance_get_switch_state(void) {
+uint16_t app_balance_get_switch_state(void)
+{
 	return switch_state;
 }
-float app_balance_get_adc1(void) {
+float app_balance_get_adc1(void)
+{
 	return adc1;
 }
-float app_balance_get_adc2(void) {
+float app_balance_get_adc2(void)
+{
 	return adc2;
 }
-float app_balance_get_debug1(void) {
+float app_balance_get_debug1(void)
+{
 	return app_balance_get_debug(debug_render_1);
 }
-float app_balance_get_debug2(void) {
+float app_balance_get_debug2(void)
+{
 	return app_balance_get_debug(debug_render_2);
 }
 
 // Internal Functions
-static void reset_vars(void){
+static void reset_vars(void)
+{
 	// Clear accumulated values.
 	integral = 0;
 	last_proportional = 0;
@@ -572,7 +634,6 @@ static void reset_vars(void){
 	last_time = 0;
 	diff_time = 0;
 	brake_timeout = 0;
-
 	// ATR:
 	biquad_reset(&accel_biquad);
 	accel_gap = 0;
@@ -580,23 +641,25 @@ static void reset_vars(void){
 	accel_gap_aggregate = 0;
 	sss = -1;
 
-	for (int i=0; i<40; i++)
+	for (int i = 0; i < 40; i++)
 		accelhist[i] = 0;
 	accelidx = 0;
 	accelavg = 0;
 
 	// Start with a minimal backwards push
 	//float start_offset_angle = balance_conf.startup_pitch_tolerance + 1;
-	setpoint_target_interpolated = pitch_angle / 2;//(fabsf(pitch_angle) - start_offset_angle) * SIGN(pitch_angle);
+	setpoint_target_interpolated = pitch_angle / 2; //(fabsf(pitch_angle) - start_offset_angle) * SIGN(pitch_angle);
 
 	// Soft-start vs normal aka quick-start:
-	if (use_soft_start) {
+	if (use_soft_start)
+	{
 		// minimum values (even 0,0,0 is possible) for soft start:
 		kp = 1;
 		ki = 0;
 		kd = 0;
 	}
-	else {
+	else
+	{
 		// Normal start / quick-start
 		kp = kp_acc * 0.8;
 		ki = ki_acc;
@@ -607,24 +670,27 @@ static void reset_vars(void){
 	center_stiffness_delay_ms = START_CENTER_DELAY_MS;
 	center_jerk_counter = 0;
 	center_jerk_adder = 0;
+	// for light
+	new_ride_state = ride_state = RIDE_OFF;
 }
 
-static float get_setpoint_adjustment_step_size(void){
-	switch(setpointAdjustmentType){
-		case (CENTERING):
-			return startup_step_size;
-		case (TILTBACK_DUTY):
-			return tiltback_duty_step_size;
-		case (TILTBACK_HV):
-			return tiltback_hv_step_size;
-		case (TILTBACK_LV):
-			return tiltback_lv_step_size;
-		case (TILTBACK_NONE):
-			return tiltback_return_step_size;
-		case (REVERSESTOP):
-			return reverse_stop_step_size;
-		default:
-			;
+static float get_setpoint_adjustment_step_size(void)
+{
+	switch (setpointAdjustmentType)
+	{
+	case (CENTERING):
+		return startup_step_size;
+	case (TILTBACK_DUTY):
+		return tiltback_duty_step_size;
+	case (TILTBACK_HV):
+		return tiltback_hv_step_size;
+	case (TILTBACK_LV):
+		return tiltback_lv_step_size;
+	case (TILTBACK_NONE):
+		return tiltback_return_step_size;
+	case (REVERSESTOP):
+		return reverse_stop_step_size;
+	default:;
 	}
 	return 0;
 }
@@ -634,34 +700,52 @@ static SwitchState check_adcs(void)
 {
 	SwitchState sw_state;
 
-	adc1 = (((float)ADC_Value[ADC_IND_EXT])/4095) * V_REG;
+	adc1 = (((float)ADC_Value[ADC_IND_EXT]) / 4095) * V_REG;
 #ifdef ADC_IND_EXT2
-	adc2 = (((float)ADC_Value[ADC_IND_EXT2])/4095) * V_REG;
+	adc2 = (((float)ADC_Value[ADC_IND_EXT2]) / 4095) * V_REG;
 #else
 	adc2 = 0.0;
 #endif
 
 	// Calculate switch state from ADC values
-	if(balance_conf.fault_adc1 == 0 && balance_conf.fault_adc2 == 0){ // No Switch
+	if (balance_conf.fault_adc1 == 0 && balance_conf.fault_adc2 == 0)
+	{ // No Switch
 		sw_state = ON;
-	}else if(balance_conf.fault_adc2 == 0){ // Single switch on ADC1
-		if(adc1 > balance_conf.fault_adc1){
+	}
+	else if (balance_conf.fault_adc2 == 0)
+	{ // Single switch on ADC1
+		if (adc1 > balance_conf.fault_adc1)
+		{
 			sw_state = ON;
-		} else {
+		}
+		else
+		{
 			sw_state = OFF;
 		}
-	}else if(balance_conf.fault_adc1 == 0){ // Single switch on ADC2
-		if(adc2 > balance_conf.fault_adc2){
+	}
+	else if (balance_conf.fault_adc1 == 0)
+	{ // Single switch on ADC2
+		if (adc2 > balance_conf.fault_adc2)
+		{
 			sw_state = ON;
-		} else {
+		}
+		else
+		{
 			sw_state = OFF;
 		}
-	}else{ // Double switch
-		if(adc1 > balance_conf.fault_adc1 && adc2 > balance_conf.fault_adc2){
+	}
+	else
+	{ // Double switch
+		if (adc1 > balance_conf.fault_adc1 && adc2 > balance_conf.fault_adc2)
+		{
 			sw_state = ON;
-		}else if(adc1 > balance_conf.fault_adc1 || adc2 > balance_conf.fault_adc2){
+		}
+		else if (adc1 > balance_conf.fault_adc1 || adc2 > balance_conf.fault_adc2)
+		{
 			sw_state = HALF;
-		}else{
+		}
+		else
+		{
 			sw_state = OFF;
 		}
 	}
@@ -669,21 +753,22 @@ static SwitchState check_adcs(void)
 	/*
 	 * Use external buzzer to notify rider of foot switch faults at speed
 	 */
-	if (sw_state == OFF) {
-		if ((abs_erpm > balance_conf.fault_adc_half_erpm)
-			&& (state >= RUNNING)
-			&& (state <= RUNNING_TILTBACK_LOW_VOLTAGE))
+	if (sw_state == OFF)
+	{
+		if ((abs_erpm > balance_conf.fault_adc_half_erpm) && (state >= RUNNING) && (state <= RUNNING_TILTBACK_LOW_VOLTAGE))
 		{
 			// If we're at riding speed and the switch is off => ALERT the user
 			// set force=true since this could indicate an imminent shutdown/nosedive
 			beep_on(true);
 		}
-		else {
+		else
+		{
 			// if we drop below riding speed stop buzzing
 			beep_off(false);
 		}
 	}
-	else {
+	else
+	{
 		// if the switch comes back on we stop buzzing
 		beep_off(false);
 	}
@@ -691,134 +776,176 @@ static SwitchState check_adcs(void)
 }
 
 // Fault checking order does not really matter. From a UX perspective, switch should be before angle.
-static bool check_faults(bool ignoreTimers){
+static bool check_faults(bool ignoreTimers)
+{
 	// Check switch
 	// Switch fully open
-	if(switch_state == OFF){
-		if(ST2MS(current_time - fault_switch_timer) > balance_conf.fault_delay_switch_full || ignoreTimers){
+	if (switch_state == OFF)
+	{
+		if (ST2MS(current_time - fault_switch_timer) > balance_conf.fault_delay_switch_full || ignoreTimers)
+		{
 			state = FAULT_SWITCH_FULL;
 			return true;
 		}
 		// low speed (below 4 x half-fault threshold speed):
-		else if ((abs_erpm < balance_conf.fault_adc_half_erpm * 4)
-				 && (ST2MS(current_time - fault_switch_timer) > balance_conf.fault_delay_switch_half)){
+		else if ((abs_erpm < balance_conf.fault_adc_half_erpm * 4) && (ST2MS(current_time - fault_switch_timer) > balance_conf.fault_delay_switch_half))
+		{
 			state = FAULT_SWITCH_FULL;
 			return true;
 		}
-		else if ((abs_erpm < balance_conf.fault_adc_half_erpm) && (fabsf(pitch_angle) > 15)) {
+		else if ((abs_erpm < balance_conf.fault_adc_half_erpm) && (fabsf(pitch_angle) > 15))
+		{
 			// QUICK STOP
 			state = FAULT_SWITCH_FULL;
 			return true;
 		}
-		else if ((abs_erpm > 3000) && !allow_high_speed_full_switch_faults) {
+		else if ((abs_erpm > 3000) && !allow_high_speed_full_switch_faults)
+		{
 			// above 3k erpm (~7mph on a 11 inch onewheel tire) don't ever produce switch faults!
 			fault_switch_timer = current_time;
 		}
-	} else {
+	}
+	else
+	{
 		fault_switch_timer = current_time;
 	}
 
 	// Feature: Reverse-Stop
-	if(setpointAdjustmentType == REVERSESTOP){
+	if (setpointAdjustmentType == REVERSESTOP)
+	{
 		//  Taking your foot off entirely while reversing? Ignore delays
-		if (switch_state == OFF) {
+		if (switch_state == OFF)
+		{
 			state = FAULT_SWITCH_FULL;
 			return true;
 		}
-		if (fabsf(pitch_angle) > 15) {
+		if (fabsf(pitch_angle) > 15)
+		{
 			state = FAULT_REVERSE;
 			return true;
 		}
 		// Above 10 degrees for a half a second? Switch it off
-		if ((fabsf(pitch_angle) > 10) && (ST2MS(current_time - reverse_timer) > 500)) {
+		if ((fabsf(pitch_angle) > 10) && (ST2MS(current_time - reverse_timer) > 500))
+		{
 			state = FAULT_REVERSE;
 			return true;
 		}
 		// Above 5 degrees for a full second? Switch it off
-		if ((fabsf(pitch_angle) > 5) && (ST2MS(current_time - reverse_timer) > 1000)) {
+		if ((fabsf(pitch_angle) > 5) && (ST2MS(current_time - reverse_timer) > 1000))
+		{
 			state = FAULT_REVERSE;
 			return true;
 		}
-		if (reverse_total_erpm > reverse_tolerance * 3) {
+		if (reverse_total_erpm > reverse_tolerance * 3)
+		{
 			state = FAULT_REVERSE;
 			return true;
 		}
-		if (fabsf(pitch_angle) < 5) {
+		if (fabsf(pitch_angle) < 5)
+		{
 			reverse_timer = current_time;
 		}
 	}
 
 	// Switch partially open and stopped
-	if((switch_state == HALF || switch_state == OFF) && abs_erpm < balance_conf.fault_adc_half_erpm){
-		if(ST2MS(current_time - fault_switch_half_timer) > balance_conf.fault_delay_switch_half || ignoreTimers){
+	if ((switch_state == HALF || switch_state == OFF) && abs_erpm < balance_conf.fault_adc_half_erpm)
+	{
+		if (ST2MS(current_time - fault_switch_half_timer) > balance_conf.fault_delay_switch_half || ignoreTimers)
+		{
 			state = FAULT_SWITCH_HALF;
 			return true;
 		}
-	} else {
+	}
+	else
+	{
 		fault_switch_half_timer = current_time;
 	}
 
 	// Check pitch angle
-	if(fabsf(pitch_angle) > balance_conf.fault_pitch){
-		if(ST2MS(current_time - fault_angle_pitch_timer) > balance_conf.fault_delay_pitch || ignoreTimers){
+	if (fabsf(pitch_angle) > balance_conf.fault_pitch)
+	{
+		if (ST2MS(current_time - fault_angle_pitch_timer) > balance_conf.fault_delay_pitch || ignoreTimers)
+		{
 			state = FAULT_ANGLE_PITCH;
 			return true;
 		}
-	}else{
+	}
+	else
+	{
 		fault_angle_pitch_timer = current_time;
 	}
 
 	// Check roll angle
-	if(fabsf(roll_angle) > balance_conf.fault_roll){
-		if(ST2MS(current_time - fault_angle_roll_timer) > balance_conf.fault_delay_roll || ignoreTimers){
+	if (fabsf(roll_angle) > balance_conf.fault_roll)
+	{
+		if (ST2MS(current_time - fault_angle_roll_timer) > balance_conf.fault_delay_roll || ignoreTimers)
+		{
 			state = FAULT_ANGLE_ROLL;
 			return true;
 		}
-	}else{
+	}
+	else
+	{
 		fault_angle_roll_timer = current_time;
 	}
 
 	// Check for duty
-	if(abs_duty_cycle > balance_conf.fault_duty){
-		if(ST2MS(current_time - fault_duty_timer) > balance_conf.fault_delay_duty || ignoreTimers){
+	if (abs_duty_cycle > balance_conf.fault_duty)
+	{
+		if (ST2MS(current_time - fault_duty_timer) > balance_conf.fault_delay_duty || ignoreTimers)
+		{
 			state = FAULT_DUTY;
 			return true;
 		}
-	} else {
+	}
+	else
+	{
 		fault_duty_timer = current_time;
 	}
 
 	return false;
 }
 
-static void calculate_setpoint_target(void){
-	if (GET_INPUT_VOLTAGE() < balance_conf.tiltback_hv) {
+static void calculate_setpoint_target(void)
+{
+	if (GET_INPUT_VOLTAGE() < balance_conf.tiltback_hv)
+	{
 		tb_highvoltage_timer = current_time;
 	}
 
-	if(setpointAdjustmentType == CENTERING) {
-		if (setpoint_target_interpolated != setpoint_target){
+	if (setpointAdjustmentType == CENTERING)
+	{
+		if (setpoint_target_interpolated != setpoint_target)
+		{
 			// Ignore tiltback during centering sequence
 			state = RUNNING;
 			softstart_timer = current_time;
 		}
-		else if (ST2MS(current_time - softstart_timer) > START_GRACE_PERIOD_MS){
+		else if (ST2MS(current_time - softstart_timer) > START_GRACE_PERIOD_MS)
+		{
 			// After a short delay transition to normal riding
 			setpointAdjustmentType = TILTBACK_NONE;
 		}
-		else if (use_soft_start == false){
+		else if (use_soft_start == false)
+		{
 			setpointAdjustmentType = TILTBACK_NONE;
 		}
-	}else if (setpointAdjustmentType == REVERSESTOP) {
+	}
+	else if (setpointAdjustmentType == REVERSESTOP)
+	{
 		// accumalete erpms:
 		reverse_total_erpm += erpm;
-		if (fabsf(reverse_total_erpm) > reverse_tolerance) {
+		if (fabsf(reverse_total_erpm) > reverse_tolerance)
+		{
 			// tilt down by 10 degrees after 50k aggregate erpm
-			setpoint_target = 10 * (fabsf(reverse_total_erpm)-reverse_tolerance) / 50000;
+			setpoint_target = 10 * (fabsf(reverse_total_erpm) - reverse_tolerance) / 50000;
 		}
-		else {
-			if (fabsf(reverse_total_erpm) <= reverse_tolerance/2) {
-				if (erpm >= 0){
+		else
+		{
+			if (fabsf(reverse_total_erpm) <= reverse_tolerance / 2)
+			{
+				if (erpm >= 0)
+				{
 					setpointAdjustmentType = TILTBACK_NONE;
 					reverse_total_erpm = 0;
 					setpoint_target = 0;
@@ -826,66 +953,94 @@ static void calculate_setpoint_target(void){
 				}
 			}
 		}
-	}else if(abs_duty_cycle > balance_conf.tiltback_duty){
-		if(erpm > 0){
+	}
+	else if (abs_duty_cycle > balance_conf.tiltback_duty)
+	{
+		if (erpm > 0)
+		{
 			setpoint_target = balance_conf.tiltback_duty_angle;
-		} else {
+		}
+		else
+		{
 			setpoint_target = -balance_conf.tiltback_duty_angle;
 		}
 		setpointAdjustmentType = TILTBACK_DUTY;
 		state = RUNNING_TILTBACK_DUTY;
-	}else if(GET_INPUT_VOLTAGE() > balance_conf.tiltback_hv){
+	}
+	else if (GET_INPUT_VOLTAGE() > balance_conf.tiltback_hv)
+	{
 		if ((ST2MS(current_time - fault_switch_timer) > 500) ||
-			(GET_INPUT_VOLTAGE() > balance_conf.tiltback_hv + 1)) {
+			(GET_INPUT_VOLTAGE() > balance_conf.tiltback_hv + 1))
+		{
 			// 500ms have passed or voltage is another volt higher, time for some tiltback
-			if(erpm > 0){
+			if (erpm > 0)
+			{
 				setpoint_target = balance_conf.tiltback_hv_angle;
-			} else {
+			}
+			else
+			{
 				setpoint_target = -balance_conf.tiltback_hv_angle;
 			}
 			setpointAdjustmentType = TILTBACK_HV;
 			state = RUNNING_TILTBACK_HIGH_VOLTAGE;
 		}
-		else {
+		else
+		{
 			// The rider has 500ms to react to the triple-beep, or maybe it was just a short spike
 			setpointAdjustmentType = TILTBACK_NONE;
 			state = RUNNING;
 		}
-		beep_alert(3, 0);	// Triple-beep
-	}else if(GET_INPUT_VOLTAGE() < balance_conf.tiltback_lv){
-		if(erpm > 0){
+		beep_alert(3, 0); // Triple-beep
+	}
+	else if (GET_INPUT_VOLTAGE() < balance_conf.tiltback_lv)
+	{
+		if (erpm > 0)
+		{
 			setpoint_target = balance_conf.tiltback_lv_angle;
-		} else {
+		}
+		else
+		{
 			setpoint_target = -balance_conf.tiltback_lv_angle;
 		}
 		setpointAdjustmentType = TILTBACK_LV;
 		state = RUNNING_TILTBACK_LOW_VOLTAGE;
-		beep_alert(3, 0);	// Triple-beep
-	}else if(mc_interface_temp_fet_filtered() > mc_max_temp_fet){
+		beep_alert(3, 0); // Triple-beep
+	}
+	else if (mc_interface_temp_fet_filtered() > mc_max_temp_fet)
+	{
 		// Use the angle from Low-Voltage tiltback, but slower speed from High-Voltage tiltback
-		beep_alert(3, 1);	// Triple-beep (long beeps)
-		if(mc_interface_temp_fet_filtered() > (mc_max_temp_fet + 1)) {
-			if(erpm > 0){
+		beep_alert(3, 1); // Triple-beep (long beeps)
+		if (mc_interface_temp_fet_filtered() > (mc_max_temp_fet + 1))
+		{
+			if (erpm > 0)
+			{
 				setpoint_target = balance_conf.tiltback_lv_angle;
-			} else {
+			}
+			else
+			{
 				setpoint_target = -balance_conf.tiltback_lv_angle;
 			}
 			setpointAdjustmentType = TILTBACK_HV;
 			state = RUNNING_TILTBACK_LOW_VOLTAGE;
 		}
-		else {
+		else
+		{
 			// The rider has 1 degree Celsius left before we start tilting back
 			setpointAdjustmentType = TILTBACK_NONE;
 			state = RUNNING;
 		}
-	}else{
+	}
+	else
+	{
 		// Normal running
-		if (use_reverse_stop && (erpm < 0)) {
+		if (use_reverse_stop && (erpm < 0))
+		{
 			setpointAdjustmentType = REVERSESTOP;
 			reverse_timer = current_time;
 			reverse_total_erpm = 0;
 		}
-		else {
+		else
+		{
 			setpointAdjustmentType = TILTBACK_NONE;
 		}
 		setpoint_target = 0;
@@ -893,51 +1048,73 @@ static void calculate_setpoint_target(void){
 	}
 }
 
-static void calculate_setpoint_interpolated(void){
-	if(setpoint_target_interpolated != setpoint_target){
+static void calculate_setpoint_interpolated(void)
+{
+	if (setpoint_target_interpolated != setpoint_target)
+	{
 		// If we are less than one step size away, go all the way
-		if(fabsf(setpoint_target - setpoint_target_interpolated) < get_setpoint_adjustment_step_size()){
+		if (fabsf(setpoint_target - setpoint_target_interpolated) < get_setpoint_adjustment_step_size())
+		{
 			setpoint_target_interpolated = setpoint_target;
-		}else if (setpoint_target - setpoint_target_interpolated > 0){
+		}
+		else if (setpoint_target - setpoint_target_interpolated > 0)
+		{
 			setpoint_target_interpolated += get_setpoint_adjustment_step_size();
-		}else{
+		}
+		else
+		{
 			setpoint_target_interpolated -= get_setpoint_adjustment_step_size();
 		}
 	}
 }
 
-static void apply_noseangling(void){
+static void apply_noseangling(void)
+{
 	// Nose angle adjustment, add variable then constant tiltback
 	float noseangling_target = 0;
-	if ((erpm > 0) && (torquetilt_interpolated < -1)) {
+	if ((erpm > 0) && (torquetilt_interpolated < -1))
+	{
 		noseangling_target = 0;
 	}
-	else if ((erpm < 0) && (torquetilt_interpolated > 1)) {
+	else if ((erpm < 0) && (torquetilt_interpolated > 1))
+	{
 		noseangling_target = 0;
 	}
-	else if (fabsf(erpm) > tiltback_variable_max_erpm) {
+	else if (fabsf(erpm) > tiltback_variable_max_erpm)
+	{
 		noseangling_target = fabsf(balance_conf.tiltback_variable_max) * SIGN(erpm);
-	} else {
+	}
+	else
+	{
 		noseangling_target = tiltback_variable * erpm;
 	}
 
-	if(erpm > balance_conf.tiltback_constant_erpm){
+	if (erpm > balance_conf.tiltback_constant_erpm)
+	{
 		noseangling_target += balance_conf.tiltback_constant;
-	} else if(erpm < -balance_conf.tiltback_constant_erpm){
+	}
+	else if (erpm < -balance_conf.tiltback_constant_erpm)
+	{
 		noseangling_target += -balance_conf.tiltback_constant;
 	}
 
-	if(fabsf(noseangling_target - noseangling_interpolated) < noseangling_step_size){
+	if (fabsf(noseangling_target - noseangling_interpolated) < noseangling_step_size)
+	{
 		noseangling_interpolated = noseangling_target;
-	}else if (noseangling_target - noseangling_interpolated > 0){
+	}
+	else if (noseangling_target - noseangling_interpolated > 0)
+	{
 		noseangling_interpolated += noseangling_step_size;
-	}else{
+	}
+	else
+	{
 		noseangling_interpolated -= noseangling_step_size;
 	}
 	setpoint += noseangling_interpolated;
 }
 
-static void apply_torquetilt(void){
+static void apply_torquetilt(void)
+{
 	// Skip torque tilt logic if strength is 0
 	if (balance_conf.torquetilt_strength == 0)
 		return;
@@ -951,9 +1128,10 @@ static void apply_torquetilt(void){
 	float torquetilt_strength = tt_strength_uphill;
 	const float accel_factor = balance_conf.yaw_kd;
 	const float accel_factor2 = balance_conf.yaw_kd * 1.3;
-	bool braking = false;	// 1 = accel, -1 = braking
+	bool braking = false; // 1 = accel, -1 = braking
 
-	if ((abs_erpm > 250) && (torque_sign != SIGN(erpm))) {
+	if ((abs_erpm > 250) && (torque_sign != SIGN(erpm)))
+	{
 		// current is negative, so we are braking or going downhill
 		// high currents downhill are less likely
 		//torquetilt_strength = tt_strength_downhill;
@@ -966,10 +1144,12 @@ static void apply_torquetilt(void){
 
 	// expected acceleration is proportional to current (minus an offset, required to balance/maintain speed)
 	float expected_acc;
-	if (abs_torque < 25) {
+	if (abs_torque < 25)
+	{
 		expected_acc = (torquetilt_filtered_current - SIGN(erpm) * torque_offset) / accel_factor;
 	}
-	else {
+	else
+	{
 		// primitive linear approximation of non-linear torque-accel relationship
 		expected_acc = (torque_sign * 25 - SIGN(erpm) * torque_offset) / accel_factor;
 		expected_acc += torque_sign * (abs_torque - 25) / accel_factor2;
@@ -983,12 +1163,15 @@ static void apply_torquetilt(void){
 		accel_gap = 0.95 * accel_gap + 0.05 * acc_diff;
 	else if (abs_erpm > 250)
 		accel_gap = 0.98 * accel_gap + 0.02 * acc_diff;
-	else {
+	else
+	{
 		// low speed erpms are VERY choppy/noisy - ignore them if we're not trying to actually accelerate
 		if (fabsf(expected_acc) < 1)
 			accel_gap = 0;
-		else if (fabsf(expected_acc) < 1.5) {
-			if (fabsf(accel_gap > 1)) {
+		else if (fabsf(expected_acc) < 1.5)
+		{
+			if (fabsf(accel_gap > 1))
+			{
 				// Once the gap is above 1 we get more aggressive
 				accel_gap = 0.9 * accel_gap + 0.1 * acc_diff;
 				static_climb = true;
@@ -997,8 +1180,10 @@ static void apply_torquetilt(void){
 				// Until the gap is below 1 we use a strong filter because of noise
 				accel_gap = 0.99 * accel_gap + 0.01 * acc_diff;
 		}
-		else {
-			if (fabsf(accel_gap > 1)) {
+		else
+		{
+			if (fabsf(accel_gap > 1))
+			{
 				accel_gap = 0.9 * accel_gap + 0.1 * acc_diff;
 				static_climb = true;
 			}
@@ -1016,25 +1201,32 @@ static void apply_torquetilt(void){
 	float new_ttt = torquetilt_strength * accel_gap;
 	bool cutback_response = false;
 
-	if (cutback && (abs_erpm > cutback_minspeed)) {
+	if (cutback && (abs_erpm > cutback_minspeed))
+	{
 		// cutbacks trump any other action (for now)
-		if (SIGN(new_ttt) == SIGN(erpm)) {
+		if (SIGN(new_ttt) == SIGN(erpm))
+		{
 			new_ttt /= 4;
 		}
-		else {
+		else
+		{
 			new_ttt *= 1.5;
 		}
 		cutback_response = true;
 	}
-	else {
+	else
+	{
 		// braking also should cause setpoint change lift, causing a delayed lingering nose lift
-		if (braking && (abs_erpm > 1000)) {
+		if (braking && (abs_erpm > 1000))
+		{
 			// negative currents alone don't necessarily consitute active braking, look at proportional:
-			if (SIGN(proportional) != SIGN(erpm)) {
+			if (SIGN(proportional) != SIGN(erpm))
+			{
 				float downhill_damper = 1;
 				// if we're braking on a downhill we don't want braking to lift the setpoint quite as much
 				if (((erpm > 1000) && (accel_gap < -1)) ||
-					((erpm < -1000) && (accel_gap > 1))) {
+					((erpm < -1000) && (accel_gap > 1)))
+				{
 					downhill_damper += fabsf(accel_gap) / 2;
 				}
 				new_ttt += (pitch_angle - setpoint) / ttt_brake_ratio / downhill_damper;
@@ -1049,151 +1241,195 @@ static void apply_torquetilt(void){
 	// Key to keeping the board level and consistent is to determine the appropriate step size!
 	// We want to react quickly to changes, but we don't want to overreact to glitches in acceleration data
 	// or trigger oscillations...
-	if ((abs_erpm < 500) && (fabsf(accel_gap) < 2)) {
+	if ((abs_erpm < 500) && (fabsf(accel_gap) < 2))
+	{
 		// at low speed we can't trust the acceleration data too much => go easy
 		step_size = torquetilt_off_step_size;
 		sss = 0;
 	}
-	else if (cutback_response) {
+	else if (cutback_response)
+	{
 		// For now cutbacks trump all other situations, always react quickly!
-		if (!braking) {
+		if (!braking)
+		{
 			step_size = torquetilt_on_step_size / 2;
 			sss = 28;
 		}
-		else {
+		else
+		{
 			step_size = torquetilt_on_step_size;
 			sss = 18;
 		}
 	}
-	else if (erpm > 0) {
-		if (torquetilt_interpolated < 0) {
+	else if (erpm > 0)
+	{
+		if (torquetilt_interpolated < 0)
+		{
 			// downhill
-			if (torquetilt_interpolated < torquetilt_target) {
-				if ((accel_gap > 1) && (accel_gap_aggregate > 20)) {
+			if (torquetilt_interpolated < torquetilt_target)
+			{
+				if ((accel_gap > 1) && (accel_gap_aggregate > 20))
+				{
 					// looks like torquetilt is reversing course
 					step_size = torquetilt_on_step_size;
 					sss = 17;
 				}
-				else if ((pitch_angle < setpoint) && (pid_value > 0) && (accel_gap > 0.5)) {
+				else if ((pitch_angle < setpoint) && (pid_value > 0) && (accel_gap > 0.5))
+				{
 					// looks like torquetilt is reversing course
 					step_size = torquetilt_on_step_size;
 					sss = 11;
 				}
-				else {
+				else
+				{
 					// to avoid oscillations we go down slower than we go up
 					step_size = torquetilt_off_step_size;
 					sss = 21;
 				}
 			}
-			else {
-				if (fabsf(accel_gap) < 0.5) {
+			else
+			{
+				if (fabsf(accel_gap) < 0.5)
+				{
 					step_size = torquetilt_off_step_size;
 					sss = 23;
 				}
-				else if (braking) {
+				else if (braking)
+				{
 					step_size = torquetilt_on_step_size / 2;
 					sss = 1;
 				}
-				else {
+				else
+				{
 					step_size = torquetilt_on_step_size;
 					sss = 2;
 				}
 			}
 		}
-		else {
+		else
+		{
 			// uphill or other heavy resistance (grass, mud, etc)
-			if ((torquetilt_target > -3) && (torquetilt_interpolated > torquetilt_target)) {
-				if ((abs_erpm < 1000) && (pitch_angle < 0.5)) {
+			if ((torquetilt_target > -3) && (torquetilt_interpolated > torquetilt_target))
+			{
+				if ((abs_erpm < 1000) && (pitch_angle < 0.5))
+				{
 					// the rider is already pushing in the other direction, obstacle cleared?
-					step_size = torquetilt_off_step_size;// / 2;
+					step_size = torquetilt_off_step_size; // / 2;
 					sss = 29;
 				}
-				else if ((abs_erpm < 2000) && ((torquetilt_interpolated - torquetilt_target) > 2)) {
+				else if ((abs_erpm < 2000) && ((torquetilt_interpolated - torquetilt_target) > 2))
+				{
 					// we're pretty slow after braking with lots of remaining TT
 					step_size = torquetilt_on_step_size / 3;
 					sss = 4;
 				}
-				else if ((abs_erpm > 2000) && (torquetilt_target < 0)) {
+				else if ((abs_erpm > 2000) && (torquetilt_target < 0))
+				{
 					step_size = torquetilt_on_step_size / 2;
 					sss = 19;
 				}
-				else {
-					step_size = torquetilt_off_step_size;		// to avoid oscillations we go down slower than we go up
+				else
+				{
+					step_size = torquetilt_off_step_size; // to avoid oscillations we go down slower than we go up
 					sss = 22;
 				}
-			}else{
-				if (fabsf(accel_gap) < 0.5) {
+			}
+			else
+			{
+				if (fabsf(accel_gap) < 0.5)
+				{
 					step_size = torquetilt_off_step_size;
 					sss = 27;
 				}
-				else if (abs_erpm < 1000) {
+				else if (abs_erpm < 1000)
+				{
 					step_size = torquetilt_on_step_size / 2;
 					sss = 5;
 				}
-				else {
+				else
+				{
 					//
 					step_size = torquetilt_on_step_size;
 					sss = 6;
 				}
 
-				if (static_climb) {
+				if (static_climb)
+				{
 					step_size = step_size * 1.5;
 					sss = 31;
 				}
 			}
 		}
 	}
-	else {
-		if (torquetilt_interpolated > 0) {
+	else
+	{
+		if (torquetilt_interpolated > 0)
+		{
 			// downhill
-			if ((torquetilt_interpolated > torquetilt_target) && (torquetilt_target > -3)) {
-				if ((pitch_angle > setpoint) && (pid_value < 0) && (accel_gap < 0)) {
+			if ((torquetilt_interpolated > torquetilt_target) && (torquetilt_target > -3))
+			{
+				if ((pitch_angle > setpoint) && (pid_value < 0) && (accel_gap < 0))
+				{
 					// looks like torquetilt is reversing course
 					step_size = torquetilt_on_step_size;
 					sss = 12;
 				}
-				else {
+				else
+				{
 					// to avoid oscillations we go down slower than we go up
 					step_size = torquetilt_off_step_size;
 					sss = 24;
 				}
 			}
-			else {
-				if (braking) {
+			else
+			{
+				if (braking)
+				{
 					step_size = torquetilt_on_step_size / 2;
 					sss = 13;
 				}
-				else {
+				else
+				{
 					step_size = torquetilt_on_step_size;
 					sss = 14;
 				}
 			}
 		}
-		else {
+		else
+		{
 			// uphill or other heavy resistance (grass, mud, etc)
-			if ((torquetilt_target < 3) && (torquetilt_interpolated < torquetilt_target)) {
-				if ((abs_erpm < 1000) && (pitch_angle > -0.5)) {
-					step_size = torquetilt_off_step_size;// / 2;
+			if ((torquetilt_target < 3) && (torquetilt_interpolated < torquetilt_target))
+			{
+				if ((abs_erpm < 1000) && (pitch_angle > -0.5))
+				{
+					step_size = torquetilt_off_step_size; // / 2;
 					sss = 8;
 				}
-				else {
-					step_size = torquetilt_off_step_size;		// to avoid oscillations we go down slower than we go up
+				else
+				{
+					step_size = torquetilt_off_step_size; // to avoid oscillations we go down slower than we go up
 					sss = 25;
 				}
-			}else{
-				if (accel_gap == 0) {
+			}
+			else
+			{
+				if (accel_gap == 0)
+				{
 					step_size = torquetilt_off_step_size;
 					sss = 26;
 				}
-				else if (abs_erpm < 1000) {
+				else if (abs_erpm < 1000)
+				{
 					step_size = torquetilt_on_step_size / 2;
 					sss = 9;
 				}
-				else {
+				else
+				{
 					step_size = torquetilt_on_step_size;
 					sss = 10;
 				}
-				if (static_climb) {
+				if (static_climb)
+				{
 					step_size = step_size * 1.5;
 					sss = 32;
 				}
@@ -1201,35 +1437,46 @@ static void apply_torquetilt(void){
 		}
 	}
 
-	if(fabsf(torquetilt_target - torquetilt_interpolated) < step_size){
+	if (fabsf(torquetilt_target - torquetilt_interpolated) < step_size)
+	{
 		torquetilt_interpolated = torquetilt_target;
-	}else if (torquetilt_target - torquetilt_interpolated > 0){
+	}
+	else if (torquetilt_target - torquetilt_interpolated > 0)
+	{
 		torquetilt_interpolated += step_size;
-	}else{
+	}
+	else
+	{
 		torquetilt_interpolated -= step_size;
 	}
 	setpoint += torquetilt_interpolated;
 }
 
-static void apply_turntilt(void){
+static void apply_turntilt(void)
+{
 	// Apply cutzone
 	float abs_yaw_scaled = abs_yaw_change * 100;
-	if((abs_yaw_scaled < balance_conf.turntilt_start_angle) || (state != RUNNING)) {
+	if ((abs_yaw_scaled < balance_conf.turntilt_start_angle) || (state != RUNNING))
+	{
 		turntilt_target = 0;
 	}
-	else {
-		if (cutback_enable) {
+	else
+	{
+		if (cutback_enable)
+		{
 			bool banked_turn = (SIGN(yaw_change) == SIGN(roll_angle));
 			if (banked_turn &&
 				(fabsf(roll_aggregate) > roll_aggregate_threshold) &&
 				(abs_yaw_scaled > 5) &&
-				((yaw_change * 100 / roll_angle) < 1)) {
+				((yaw_change * 100 / roll_angle) < 1))
+			{
 				// board is leaning in the direction it's turning (true in most turns)
 				// AND roll angle is greater than yaw_change
 				// AND aggregate roll is large (at least half a second or so of significant roll)
 				cutback = true;
 			}
-			else {
+			else
+			{
 				cutback = false;
 			}
 		}
@@ -1240,16 +1487,20 @@ static void apply_turntilt(void){
 
 		// Apply speed scaling
 		float boost;
-		if(abs_erpm < balance_conf.turntilt_erpm_boost_end){
+		if (abs_erpm < balance_conf.turntilt_erpm_boost_end)
+		{
 			boost = 1.0 + abs_erpm * tuntilt_boost_per_erpm;
-		}else{
+		}
+		else
+		{
 			boost = 1.0 + (float)balance_conf.turntilt_erpm_boost / 100.0;
 		}
 		turntilt_target *= boost;
 
 		// Increase turntilt based on aggregate yaw change (at most: double it)
 		float aggregate_damper = 1.0;
-		if (abs_erpm < 2000) {
+		if (abs_erpm < 2000)
+		{
 			aggregate_damper = 0.5;
 		}
 		boost = 1 + aggregate_damper * fabsf(yaw_aggregate) / yaw_aggregate_target;
@@ -1260,40 +1511,52 @@ static void apply_turntilt(void){
 		turntilt_target = fminf(turntilt_target, balance_conf.turntilt_angle_limit);
 
 		// Disable below erpm threshold otherwise add directionality
-		if(abs_erpm < balance_conf.turntilt_start_erpm){
+		if (abs_erpm < balance_conf.turntilt_start_erpm)
+		{
 			turntilt_target = 0;
-		}else {
+		}
+		else
+		{
 			turntilt_target *= SIGN(erpm);
 		}
 
 		// ATR interference: Reduce turntilt_target during moments of high torque response
 		float atr_min = 2;
 		float atr_max = 5;
-		if (SIGN(torquetilt_target) != SIGN(turntilt_target)) {
+		if (SIGN(torquetilt_target) != SIGN(turntilt_target))
+		{
 			// further reduced turntilt during moderate to steep downhills
 			atr_min = 1;
 			atr_max = 4;
 		}
-		if (fabsf(torquetilt_target) > atr_min) {
-			if (cutback) {
+		if (fabsf(torquetilt_target) > atr_min)
+		{
+			if (cutback)
+			{
 				turntilt_target = -turntilt_target;
 			}
-			else {
+			else
+			{
 				// Start scaling turntilt when ATR>2, down to 0 turntilt for ATR > 5 degrees
-				float atr_scaling = (atr_max - fabsf(torquetilt_target)) / (atr_max-atr_min);
-				if (atr_scaling < 0) {
+				float atr_scaling = (atr_max - fabsf(torquetilt_target)) / (atr_max - atr_min);
+				if (atr_scaling < 0)
+				{
 					atr_scaling = 0;
 					// during heavy torque response clear the yaw aggregate too
 					yaw_aggregate = 0;
 				}
 				turntilt_target *= atr_scaling;
 			}
-		} else {
-			if (cutback) {
+		}
+		else
+		{
+			if (cutback)
+			{
 				turntilt_target = 0;
 			}
 		}
-		if (fabsf(pitch_angle - noseangling_interpolated) > 4) {
+		if (fabsf(pitch_angle - noseangling_interpolated) > 4)
+		{
 			// no setpoint changes during heavy acceleration or braking
 			turntilt_target = 0;
 			yaw_aggregate = 0;
@@ -1301,22 +1564,88 @@ static void apply_turntilt(void){
 	}
 
 	// Move towards target limited by max speed
-	if(fabsf(turntilt_target - turntilt_interpolated) < turntilt_step_size){
+	if (fabsf(turntilt_target - turntilt_interpolated) < turntilt_step_size)
+	{
 		turntilt_interpolated = turntilt_target;
-	}else if (turntilt_target - turntilt_interpolated > 0){
+	}
+	else if (turntilt_target - turntilt_interpolated > 0)
+	{
 		turntilt_interpolated += turntilt_step_size;
-	}else{
+	}
+	else
+	{
 		turntilt_interpolated -= turntilt_step_size;
 	}
 	setpoint += turntilt_interpolated;
 }
 
-static void brake(void){
+// update light
+static void update_lights(void)
+{
+	ride_state = new_ride_state;
+	switch (ride_state)
+	{
+	case RIDE_OFF:
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_OFF();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+
+		break;
+	case RIDE_IDLE:
+		LIGHT_FWD_ON();
+		LIGHT_BACK_ON();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+		break;
+	case RIDE_FORWARD:
+		LIGHT_FWD_ON();
+		LIGHT_BACK_OFF();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+		break;
+	case RIDE_REVERSE:
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_ON();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+		break;
+	case BRAKE_FORWARD:
+		LIGHT_FWD_ON();
+		LIGHT_BACK_OFF();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+		break;
+	case BRAKE_REVERSE:
+		LIGHT_FWD_OFF();
+		LIGHT_BACK_ON();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+			BRAKE_LIGHT_ON();
+		else
+			BRAKE_LIGHT_OFF();
+		break;
+	}
+}
+
+static void brake(void)
+{
 	// Brake timeout logic
-	if(balance_conf.brake_timeout > 0 && (abs_erpm > 1 || brake_timeout == 0)){
+	if (balance_conf.brake_timeout > 0 && (abs_erpm > 1 || brake_timeout == 0))
+	{
 		brake_timeout = current_time + S2ST(balance_conf.brake_timeout);
 	}
-	if(brake_timeout != 0 && current_time > brake_timeout){
+	if (brake_timeout != 0 && current_time > brake_timeout)
+	{
 		return;
 	}
 
@@ -1324,9 +1653,13 @@ static void brake(void){
 	timeout_reset();
 	// Set current
 	mc_interface_set_brake_current(balance_conf.brake_current);
+	// light status
+	new_ride_state = RIDE_OFF;
+	update_lights();
 }
 
-static void set_current(float current){
+static void set_current(float current)
+{
 	// Reset the timeout
 	timeout_reset();
 	// Set the current delay
@@ -1335,22 +1668,26 @@ static void set_current(float current){
 	mc_interface_set_current(current);
 }
 
-static THD_FUNCTION(balance_thread, arg) {
+static THD_FUNCTION(balance_thread, arg)
+{
 	(void)arg;
 	chRegSetThreadName("APP_BALANCE");
 
-	while (!chThdShouldTerminateX()) {
+	while (!chThdShouldTerminateX())
+	{
 		// Update times
 		current_time = chVTGetSystemTimeX();
-		if(last_time == 0){
-		  last_time = current_time;
+		if (last_time == 0)
+		{
+			last_time = current_time;
 		}
 		diff_time = current_time - last_time;
 		filtered_diff_time = 0.03 * diff_time + 0.97 * filtered_diff_time; // Purely a metric
 		last_time = current_time;
-		if(balance_conf.loop_time_filter > 0){
+		if (balance_conf.loop_time_filter > 0)
+		{
 			loop_overshoot = diff_time - (loop_time - roundf(filtered_loop_overshoot));
-			filtered_loop_overshoot = loop_overshoot_alpha * loop_overshoot + (1-loop_overshoot_alpha)*filtered_loop_overshoot;
+			filtered_loop_overshoot = loop_overshoot_alpha * loop_overshoot + (1 - loop_overshoot_alpha) * filtered_loop_overshoot;
 		}
 
 		// Read values for GUI
@@ -1373,7 +1710,7 @@ static THD_FUNCTION(balance_thread, arg) {
 		yaw_angle = imu_get_yaw() * 180.0f / M_PI;
 		float new_change = yaw_angle - last_yaw_angle;
 		bool unchanged = false;
-		if ((new_change == 0) // Exact 0's only happen when the IMU is not updating between loops
+		if ((new_change == 0)			  // Exact 0's only happen when the IMU is not updating between loops
 			|| (fabsf(new_change) > 100)) // yaw flips signs at 180, ignore those changes
 		{
 			new_change = last_yaw_change;
@@ -1390,16 +1727,19 @@ static THD_FUNCTION(balance_thread, arg) {
 		if (SIGN(yaw_change) != SIGN(yaw_aggregate))
 			yaw_aggregate = 0;
 		abs_yaw_change = fabsf(yaw_change);
-		if ((abs_yaw_change > 0.04) && !unchanged)	// don't count tiny yaw changes towards aggregate
+		if ((abs_yaw_change > 0.04) && !unchanged) // don't count tiny yaw changes towards aggregate
 			yaw_aggregate += yaw_change;
 
 		// Cutbacks:
-		if (abs_roll_angle > 8) {
+		if (abs_roll_angle > 8)
+		{
 			roll_aggregate += roll_angle;
-		} else {
+		}
+		else
+		{
 			roll_aggregate = 0;
 		}
-		
+
 		float smooth_erpm = erpm_sign * mcpwm_foc_get_smooth_erpm();
 		acceleration_raw = smooth_erpm - last_erpm;
 		//acceleration = biquad_process(&accel_biquad, acceleration_raw);
@@ -1416,331 +1756,409 @@ static THD_FUNCTION(balance_thread, arg) {
 		switch_state = check_adcs();
 
 		// Control Loop State Logic
-		switch(state){
-			case (STARTUP):
-				// Disable output
-				brake();
-				if(imu_startup_done()){
-					if ((mc_interface_get_configuration()->foc_motor_r == MCCONF_FOC_MOTOR_R) &&
-						(mc_interface_get_configuration()->foc_motor_flux_linkage == MCCONF_FOC_MOTOR_FLUX_LINKAGE)) {
-						// these are default values, this can't be good!
-						beep_on(true);
-						chThdSleepMilliseconds(100);
-						beep_off(true);
-						chThdSleepMilliseconds(100);
-						break;
-					}
-					
-					reset_vars();
-					state = FAULT_STARTUP; // Trigger a fault so we need to meet start conditions to start
-
-					if (balance_conf.deadzone > 0) {
-						play_tune(balance_conf.deadzone == 1);
-					}
-#ifdef HAS_EXT_BUZZER
-					// Let the rider know that the board is ready
+		switch (state)
+		{
+		case (STARTUP):
+			// Disable output
+			brake();
+			if (imu_startup_done())
+			{
+				if ((mc_interface_get_configuration()->foc_motor_r == MCCONF_FOC_MOTOR_R) &&
+					(mc_interface_get_configuration()->foc_motor_flux_linkage == MCCONF_FOC_MOTOR_FLUX_LINKAGE))
+				{
+					// these are default values, this can't be good!
 					beep_on(true);
 					chThdSleepMilliseconds(100);
 					beep_off(true);
-					// Are we within 5V of the LV tiltback threshold? Issue 1 beep for each volt below that
-					double bat_volts = GET_INPUT_VOLTAGE();
-					double threshold = balance_conf.tiltback_lv + 5;
-					if (bat_volts < threshold) {
+					chThdSleepMilliseconds(100);
+					break;
+				}
+
+				reset_vars();
+				state = FAULT_STARTUP; // Trigger a fault so we need to meet start conditions to start
+
+				if (balance_conf.deadzone > 0)
+				{
+					play_tune(balance_conf.deadzone == 1);
+				}
+#ifdef HAS_EXT_BUZZER
+				// Let the rider know that the board is ready
+				beep_on(true);
+				chThdSleepMilliseconds(100);
+				beep_off(true);
+				// Are we within 5V of the LV tiltback threshold? Issue 1 beep for each volt below that
+				double bat_volts = GET_INPUT_VOLTAGE();
+				double threshold = balance_conf.tiltback_lv + 5;
+				if (bat_volts < threshold)
+				{
+					chThdSleepMilliseconds(300);
+					while (bat_volts < threshold)
+					{
+						chThdSleepMilliseconds(200);
+						beep_on(1);
 						chThdSleepMilliseconds(300);
-						while (bat_volts < threshold) {
-							chThdSleepMilliseconds(200);
-							beep_on(1);
-							chThdSleepMilliseconds(300);
-							beep_off(1);
-							threshold -= 1;
-						}
+						beep_off(1);
+						threshold -= 1;
 					}
+				}
 #endif
-				}
-				inactivity_timer = -1;
+			}
+			inactivity_timer = -1;
+			break;
+
+		case (RUNNING):
+		case (RUNNING_TILTBACK_DUTY):
+		case (RUNNING_TILTBACK_HIGH_VOLTAGE):
+		case (RUNNING_TILTBACK_LOW_VOLTAGE):
+			log_balance_state = state + (setpointAdjustmentType << 4);
+			if (cutback)
+				log_balance_state += 128;
+
+			inactivity_timer = -1;
+			lock_state = -1;
+
+			// Check for faults
+			if (check_faults(false))
+			{
 				break;
+			}
 
-			case (RUNNING):
-			case (RUNNING_TILTBACK_DUTY):
-			case (RUNNING_TILTBACK_HIGH_VOLTAGE):
-			case (RUNNING_TILTBACK_LOW_VOLTAGE):
-				log_balance_state = state + (setpointAdjustmentType << 4);
-				if (cutback)
-					log_balance_state += 128;
+			// Calculate setpoint and interpolation
+			calculate_setpoint_target();
+			calculate_setpoint_interpolated();
+			setpoint = setpoint_target_interpolated;
+			if (setpointAdjustmentType >= TILTBACK_NONE)
+			{
+				apply_noseangling(); // Always do nose angling, even during tiltback situations
+				apply_torquetilt();	 // Torquetilt remains in effect even during tiltback situations
+				apply_turntilt();
+			}
 
-				inactivity_timer = -1;
-				lock_state = -1;
+			// Do PID maths
+			proportional = setpoint - pitch_angle;
+			float abs_prop = fabsf(proportional);
 
-				// Check for faults
-				if(check_faults(false)){
-					break;
+			// Integral component, only partially affected by torquetilt
+			integral = integral + proportional;
+			// Produce controlled nose/tail lift with increased torque
+			float tt_impact;
+			if (torquetilt_interpolated < 0)
+				// Downhill tail lift doesn't need to be as high as uphill nose lift
+				tt_impact = integral_tt_impact_downhill;
+			else
+			{
+				tt_impact = integral_tt_impact_uphill;
+
+				const float max_impact_erpm = 2500;
+				const float starting_impact = 0.3;
+				if (abs_erpm < max_impact_erpm)
+				{
+					// Reduced nose lift at lower speeds
+					// Creates a value between 0.5 and 1.0
+					float erpm_scaling = fmaxf(starting_impact, abs_erpm / max_impact_erpm);
+					tt_impact = (1.0 - (1.0 - tt_impact) * erpm_scaling);
 				}
+			}
+			integral -= torquetilt_interpolated * tt_impact;
 
-				// Calculate setpoint and interpolation
-				calculate_setpoint_target();
-				calculate_setpoint_interpolated();
-				setpoint = setpoint_target_interpolated;
-				if (setpointAdjustmentType >= TILTBACK_NONE) {
-					apply_noseangling();	// Always do nose angling, even during tiltback situations
-					apply_torquetilt();		// Torquetilt remains in effect even during tiltback situations
-					apply_turntilt();
+			// Derivative with D term PT1 filter
+			derivative = last_pitch_angle - pitch_angle;
+			d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
+			derivative = d_pt1_lowpass_state;
+
+			// Identify braking based on angle of the board vs direction of movement
+			bool braking = (SIGN(proportional) != SIGN(erpm));
+
+			float kp_target, ki_target, kd_target;
+			float p_multiplier = 1;
+			float di_multiplier = 1;
+			const float max_di_mult = 1.7;
+			if (fabsf(torquetilt_interpolated) > 2)
+			{
+				// torque stiffness
+				p_multiplier = fabsf(torquetilt_interpolated) / 6 * tt_pid_intensity;
+				di_multiplier = fminf(1 + p_multiplier / 2, max_di_mult);
+				p_multiplier = fminf(1 + p_multiplier, 2);
+			}
+			// stiffen kP and also kI (not quite as much as kP) with increased torquetilt
+			kp_target = kp_acc * p_multiplier;
+			ki_target = ki_acc * di_multiplier;
+			// basic kD is high already for center balancing, don't stiffen it more!
+			kd_target = kd_acc;
+
+			if (abs_prop > center_boost_angle + 0.5)
+			{
+				// Reduce kD (high by default to handle stiff center) when we're far away from the center!
+				kd_target = kd_target * di_multiplier / max_di_mult; // 1200 / 1.7 = ~700
+			}
+			if (setpointAdjustmentType >= TILTBACK_NONE)
+			{
+				// Ensure smooth transition between different PID targets
+				if (kp_target > kp)
+				{
+					// stiffen quickly (~50ms)
+					kp = kp * 0.98 + kp_target * 0.02;
+					ki = ki * 0.98 + ki_target * 0.02;
 				}
-
-				// Do PID maths
-				proportional = setpoint - pitch_angle;
-				float abs_prop = fabsf(proportional);
-
-				// Integral component, only partially affected by torquetilt
-				integral = integral + proportional;
-				// Produce controlled nose/tail lift with increased torque
-				float tt_impact;
-				if (torquetilt_interpolated < 0)
-					// Downhill tail lift doesn't need to be as high as uphill nose lift
-					tt_impact = integral_tt_impact_downhill;
-				else {
-					tt_impact = integral_tt_impact_uphill;
-
-					const float max_impact_erpm = 2500;
-					const float starting_impact = 0.3;
-					if (abs_erpm < max_impact_erpm) {
-						// Reduced nose lift at lower speeds
-						// Creates a value between 0.5 and 1.0
-						float erpm_scaling = fmaxf(starting_impact, abs_erpm / max_impact_erpm);
-						tt_impact = (1.0 - (1.0 - tt_impact) * erpm_scaling);
-					}
+				else
+				{
+					// loosen slowly (~500ms)
+					kp = kp * 0.998 + kp_target * 0.002;
+					ki = ki * 0.998 + ki_target * 0.002;
 				}
-				integral -= torquetilt_interpolated * tt_impact;
+				kd = kd * 0.98 + kd_target * 0.02;
+			}
+			else if (setpointAdjustmentType == CENTERING)
+			{
+				kp = kp * 0.995 + kp_target * 0.005;
+				ki = ki * 0.995 + ki_target * 0.005;
+				kd = kd * 0.995 + kd_target * 0.005;
+			}
+			else if (setpointAdjustmentType == REVERSESTOP)
+			{
+				kp_target = 2;
+				kd_target = 400;
+				integral = 0;
+				kp = kp * 0.99 + kp_target * 0.01;
+				kd = kd * 0.99 + kd_target * 0.01;
+				ki = 0;
+			}
 
-				// Derivative with D term PT1 filter
-				derivative = last_pitch_angle - pitch_angle;
-				d_pt1_lowpass_state = d_pt1_lowpass_state + d_pt1_lowpass_k * (derivative - d_pt1_lowpass_state);
-				derivative = d_pt1_lowpass_state;
+			float pid_prop = 0, pid_derivative = 0, pid_integral = 0;
 
-				// Identify braking based on angle of the board vs direction of movement
-				bool braking = (SIGN(proportional) != SIGN(erpm));
-
-				float kp_target, ki_target, kd_target;
-				float p_multiplier = 1;
-				float di_multiplier = 1;
-				const float max_di_mult = 1.7;
-				if (fabsf(torquetilt_interpolated) > 2) {
-					// torque stiffness
-					p_multiplier = fabsf(torquetilt_interpolated) / 6 * tt_pid_intensity;
-					di_multiplier = fminf(1 + p_multiplier / 2, max_di_mult);
-					p_multiplier = fminf(1 + p_multiplier, 2);
-				}
-				// stiffen kP and also kI (not quite as much as kP) with increased torquetilt
-				kp_target = kp_acc * p_multiplier;
-				ki_target = ki_acc * di_multiplier;
-				// basic kD is high already for center balancing, don't stiffen it more!
-				kd_target = kd_acc;
-
-				if (abs_prop > center_boost_angle + 0.5) {
-					// Reduce kD (high by default to handle stiff center) when we're far away from the center!
-					kd_target = kd_target * di_multiplier / max_di_mult;	// 1200 / 1.7 = ~700
-				}
-				if (setpointAdjustmentType >= TILTBACK_NONE) {
-					// Ensure smooth transition between different PID targets
-					if (kp_target > kp) {
-						// stiffen quickly (~50ms)
-						kp = kp * 0.98 + kp_target * 0.02;
-						ki = ki * 0.98 + ki_target * 0.02;
-					}
-					else {
-						// loosen slowly (~500ms)
-						kp = kp * 0.998 + kp_target * 0.002;
-						ki = ki * 0.998 + ki_target * 0.002;
-					}
-					kd = kd * 0.98 + kd_target * 0.02;
-				}
-				else if (setpointAdjustmentType == CENTERING) {
-					kp = kp * 0.995 + kp_target * 0.005;
-					ki = ki * 0.995 + ki_target * 0.005;
-					kd = kd * 0.995 + kd_target * 0.005;
-				}
-				else if (setpointAdjustmentType == REVERSESTOP) {
-					kp_target = 2;
-					kd_target = 400;
-					integral = 0;
-					kp = kp * 0.99 + kp_target * 0.01;
-					kd = kd * 0.99 + kd_target * 0.01;
-					ki = 0;
-				}
-
-				float pid_prop = 0, pid_derivative = 0, pid_integral = 0;
-
-				if (use_soft_start && (setpointAdjustmentType == CENTERING)) {
-					// soft-start
-					pid_prop = kp * proportional;
-					pid_derivative = kd * derivative;
-					pid_value = 0.05 * (pid_prop + pid_derivative) + 0.95 * pid_value;
-					// once centering is done, start integral component from 0
-					integral = 0;
-					ki = 0;
-				}
-				else {
-					// P:
-					// use higher kp for first few degrees of proportional to keep the board more stable
-					pid_prop = kp * proportional;
-					float center_boost = fminf(abs_prop, center_boost_angle);
-					float accel_boost = 0;
-					if(center_stiffness_delay_ms) {
-						pid_prop += center_boost * center_boost_kp_adder * SIGN(proportional) *
-							(START_CENTER_DELAY_MS - center_stiffness_delay_ms) / START_CENTER_DELAY_MS;
-						center_stiffness_delay_ms--;
-						if (center_jerk_counter < center_jerk_duration_ms) {
-							if (center_jerk_counter > center_jerk_duration_ms / 2) {
-								center_jerk_adder = center_jerk_adder*0.95 + center_jerk_strength*0.05;
-							}
-							else {
-								center_jerk_adder = center_jerk_adder*0.95 - center_jerk_strength*0.05;
-							}
-							pid_prop += center_jerk_adder;
-							if (center_jerk_counter == 0)
-								beep_alert(1, 0);
-							center_jerk_counter++;
+			if (use_soft_start && (setpointAdjustmentType == CENTERING))
+			{
+				// soft-start
+				pid_prop = kp * proportional;
+				pid_derivative = kd * derivative;
+				pid_value = 0.05 * (pid_prop + pid_derivative) + 0.95 * pid_value;
+				// once centering is done, start integral component from 0
+				integral = 0;
+				ki = 0;
+			}
+			else
+			{
+				// P:
+				// use higher kp for first few degrees of proportional to keep the board more stable
+				pid_prop = kp * proportional;
+				float center_boost = fminf(abs_prop, center_boost_angle);
+				float accel_boost = 0;
+				if (center_stiffness_delay_ms)
+				{
+					pid_prop += center_boost * center_boost_kp_adder * SIGN(proportional) *
+								(START_CENTER_DELAY_MS - center_stiffness_delay_ms) / START_CENTER_DELAY_MS;
+					center_stiffness_delay_ms--;
+					if (center_jerk_counter < center_jerk_duration_ms)
+					{
+						if (center_jerk_counter > center_jerk_duration_ms / 2)
+						{
+							center_jerk_adder = center_jerk_adder * 0.95 + center_jerk_strength * 0.05;
 						}
-					}
-					else {
-						pid_prop += center_boost * center_boost_kp_adder * SIGN(proportional);
-
-						// Acceleration boost
-						if ((abs_prop > accel_boost_threshold) && !braking) {
-							float boost_prop = abs_prop - accel_boost_threshold;
-							accel_boost = boost_prop * kp * accel_boost_intensity;
-
-							if (abs_prop > accel_boost_threshold2) {
-								boost_prop = abs_prop - accel_boost_threshold2;
-								accel_boost += boost_prop * kp * accel_boost_intensity;
-							}
+						else
+						{
+							center_jerk_adder = center_jerk_adder * 0.95 - center_jerk_strength * 0.05;
 						}
-
-						pid_prop += accel_boost * SIGN(proportional);
+						pid_prop += center_jerk_adder;
+						if (center_jerk_counter == 0)
+							beep_alert(1, 0);
+						center_jerk_counter++;
 					}
+				}
+				else
+				{
+					pid_prop += center_boost * center_boost_kp_adder * SIGN(proportional);
 
-					pid_derivative = kd * derivative;
-					if (fabsf(pid_derivative) > max_derivative) {
-						pid_derivative = max_derivative * SIGN(pid_derivative);
-					}
+					// Acceleration boost
+					if ((abs_prop > accel_boost_threshold) && !braking)
+					{
+						float boost_prop = abs_prop - accel_boost_threshold;
+						accel_boost = boost_prop * kp * accel_boost_intensity;
 
-					// Treat P+D together
-					float new_pd_value = pid_prop + pid_derivative;
-					if (SIGN(erpm) != SIGN(new_pd_value)) {
-						// limit P and D braking amps while slow on flat ground
-						float pid_max = fmaxf(max_brake_amps, fabsf(pid_prop));
-						float tt = fabs(torquetilt_interpolated);
-						if (tt > 2) {
-							// increase pid_max with torque tilt
-							pid_max *= (0.75 + tt / 8);
-						}
-						if (abs_erpm > 2000) {
-							// increase pid_max with erpm
-							pid_max *= (0.8 + abs_erpm / 10000);
-						}
-						if (fabsf(new_pd_value) > pid_max) {
-							new_pd_value = SIGN(new_pd_value) * pid_max;
+						if (abs_prop > accel_boost_threshold2)
+						{
+							boost_prop = abs_prop - accel_boost_threshold2;
+							accel_boost += boost_prop * kp * accel_boost_intensity;
 						}
 					}
 
-					// I:
-					pid_integral = ki * integral;
-
-					// smoothen out requested current (introduce ~5ms effective latency)
-					pid_value = 0.2 * (new_pd_value + pid_integral) + 0.8 * pid_value;
+					pid_prop += accel_boost * SIGN(proportional);
 				}
 
-				last_proportional = proportional;
-
-				// For logging only:
-				balance_integral = integral;
-				balance_ki = ki;
-				balance_setpoint = setpoint;
-				balance_atr = torquetilt_target;
-				balance_carve = turntilt_target;
-
-				// Output to motor
-				if (pid_value > mc_current_max) {
-					pid_value = mc_current_max - 3;
-					beep_on(1);
-				}
-				else if (pid_value < mc_current_min) {
-					pid_value = mc_current_min + 3;
-					beep_on(1);
-				}
-				else {
-					beep_off(0);
+				pid_derivative = kd * derivative;
+				if (fabsf(pid_derivative) > max_derivative)
+				{
+					pid_derivative = max_derivative * SIGN(pid_derivative);
 				}
 
-				if (start_counter_clicks) {
-					start_counter_clicks--;
-					if ((start_counter_clicks == 0) || (start_counter_clicks == 2))
-						set_current(pid_value - click_current);
+				// Treat P+D together
+				float new_pd_value = pid_prop + pid_derivative;
+				if (SIGN(erpm) != SIGN(new_pd_value))
+				{
+					// limit P and D braking amps while slow on flat ground
+					float pid_max = fmaxf(max_brake_amps, fabsf(pid_prop));
+					float tt = fabs(torquetilt_interpolated);
+					if (tt > 2)
+					{
+						// increase pid_max with torque tilt
+						pid_max *= (0.75 + tt / 8);
+					}
+					if (abs_erpm > 2000)
+					{
+						// increase pid_max with erpm
+						pid_max *= (0.8 + abs_erpm / 10000);
+					}
+					if (fabsf(new_pd_value) > pid_max)
+					{
+						new_pd_value = SIGN(new_pd_value) * pid_max;
+					}
+				}
+
+				// I:
+				pid_integral = ki * integral;
+
+				// smoothen out requested current (introduce ~5ms effective latency)
+				pid_value = 0.2 * (new_pd_value + pid_integral) + 0.8 * pid_value;
+			}
+
+			last_proportional = proportional;
+
+			// For logging only:
+			balance_integral = integral;
+			balance_ki = ki;
+			balance_setpoint = setpoint;
+			balance_atr = torquetilt_target;
+			balance_carve = turntilt_target;
+
+			// Output to motor
+			if (pid_value > mc_current_max)
+			{
+				pid_value = mc_current_max - 3;
+				beep_on(1);
+			}
+			else if (pid_value < mc_current_min)
+			{
+				pid_value = mc_current_min + 3;
+				beep_on(1);
+			}
+			else
+			{
+				beep_off(0);
+			}
+
+			if (start_counter_clicks)
+			{
+				start_counter_clicks--;
+				if ((start_counter_clicks == 0) || (start_counter_clicks == 2))
+					set_current(pid_value - click_current);
+				else
+					set_current(pid_value + click_current);
+			}
+			else
+			{
+				set_current(pid_value);
+			}
+			// light state
+			if (abs_erpm > balance_conf.fault_adc_half_erpm)
+			{
+				// we're at riding speed => turn on the forward facing lights
+				if (pid_value > -4)
+				{
+					if (erpm > 0)
+					{
+						new_ride_state = RIDE_FORWARD;
+					}
 					else
-						set_current(pid_value + click_current);
-				}
-				else {
-					set_current(pid_value);
-				}
-				break;
-			case (FAULT_ANGLE_PITCH):
-			case (FAULT_ANGLE_ROLL):
-			case (FAULT_SWITCH_HALF):
-			case (FAULT_SWITCH_FULL):
-			case (FAULT_STARTUP):
-			case (FAULT_REVERSE):
-				if (log_balance_state != FAULT_DUTY)
-					log_balance_state = state;
-
-				if ((state != FAULT_STARTUP) || (GET_INPUT_VOLTAGE() < (balance_conf.tiltback_lv + 2)))  {
-					// If the board got turned on without ever being ridden the state is FAULT_STARTUP
-					// This might mean the board is being charged (external anti-spark switch)
-					// In that case we only nag if we enter low voltage territorry!
-
-					if (inactivity_timer == -1)
-						inactivity_timer = current_time;
-
-					if ((inactivity_timeout > 0) &&
-						(ST2S(current_time - inactivity_timer) > inactivity_timeout)){
-
-						// triple-beep
-						beep_on(true);
-						chThdSleepMilliseconds(200);
-						beep_off(true);
-						chThdSleepMilliseconds(100);
-						beep_on(true);
-						chThdSleepMilliseconds(200);
-						beep_off(true);
-						chThdSleepMilliseconds(100);
-						beep_on(true);
-						chThdSleepMilliseconds(200);
-						beep_off(true);
-
-						inactivity_timeout = 10; // beep again in 10 seconds
-						inactivity_timer = current_time;
+					{
+						new_ride_state = RIDE_REVERSE;
 					}
 				}
-
-				check_lock();
-
-				// Check for valid startup position and switch state
-				if(is_locked == false &&
-				   fabsf(pitch_angle) < balance_conf.startup_pitch_tolerance &&
-				   fabsf(roll_angle) < balance_conf.startup_roll_tolerance && switch_state == ON){
-					reset_vars();
-					break;
+				else
+				{
+					if (erpm > 0)
+					{
+						new_ride_state = BRAKE_FORWARD;
+					}
+					else
+					{
+						new_ride_state = BRAKE_REVERSE;
+					}
 				}
-				// Disable output
-				brake();
+			}
+			else
+			{
+				new_ride_state = RIDE_IDLE;
+			}
+			if (new_ride_state != ride_state)
+			{
+				update_lights();
+			}
+
+			break;
+		case (FAULT_ANGLE_PITCH):
+		case (FAULT_ANGLE_ROLL):
+		case (FAULT_SWITCH_HALF):
+		case (FAULT_SWITCH_FULL):
+		case (FAULT_STARTUP):
+		case (FAULT_REVERSE):
+			if (log_balance_state != FAULT_DUTY)
+				log_balance_state = state;
+
+			if ((state != FAULT_STARTUP) || (GET_INPUT_VOLTAGE() < (balance_conf.tiltback_lv + 2)))
+			{
+				// If the board got turned on without ever being ridden the state is FAULT_STARTUP
+				// This might mean the board is being charged (external anti-spark switch)
+				// In that case we only nag if we enter low voltage territorry!
+
+				if (inactivity_timer == -1)
+					inactivity_timer = current_time;
+
+				if ((inactivity_timeout > 0) &&
+					(ST2S(current_time - inactivity_timer) > inactivity_timeout))
+				{
+
+					// triple-beep
+					beep_on(true);
+					chThdSleepMilliseconds(200);
+					beep_off(true);
+					chThdSleepMilliseconds(100);
+					beep_on(true);
+					chThdSleepMilliseconds(200);
+					beep_off(true);
+					chThdSleepMilliseconds(100);
+					beep_on(true);
+					chThdSleepMilliseconds(200);
+					beep_off(true);
+
+					inactivity_timeout = 10; // beep again in 10 seconds
+					inactivity_timer = current_time;
+				}
+			}
+
+			check_lock();
+
+			// Check for valid startup position and switch state
+			new_ride_state = RIDE_OFF;
+			if (is_locked == false &&
+				fabsf(pitch_angle) < balance_conf.startup_pitch_tolerance &&
+				fabsf(roll_angle) < balance_conf.startup_roll_tolerance && switch_state == ON)
+			{
+				reset_vars();
+				update_lights();
 				break;
-			case (FAULT_DUTY):
-				log_balance_state = FAULT_DUTY;
-				// We need another fault to clear duty fault.
-				// Otherwise duty fault will clear itself as soon as motor pauses, then motor will spool up again.
-				// Rendering this fault useless.
-				check_faults(true);
-				// Disable output
-				brake();
-				break;
+			}
+			// Disable output
+			brake();
+			break;
+		case (FAULT_DUTY):
+			log_balance_state = FAULT_DUTY;
+			new_ride_state = RIDE_OFF;
+			// We need another fault to clear duty fault.
+			// Otherwise duty fault will clear itself as soon as motor pauses, then motor will spool up again.
+			// Rendering this fault useless.
+			check_faults(true);
+			// Disable output
+			brake();
+			break;
 		}
 		update_beep_alert();
 
@@ -1761,119 +2179,166 @@ static THD_FUNCTION(balance_thread, arg) {
 /**
  * check_lock:	perform lock management
  */
-static void check_lock() {
+static void check_lock()
+{
 	// require a minimum of 50ms delay between each step (to avoid false triggers)
 	if (ST2MS(current_time - lock_timer) < 50)
 		return;
 
 	int old_lock_state = lock_state;
-	switch(lock_state) {
-	case -1: if (switch_state == ON) lock_state = 0;
+	switch (lock_state)
+	{
+	case -1:
+		if (switch_state == ON)
+			lock_state = 0;
 		break;
-	case 0: if (switch_state == OFF) lock_state = 1;
+	case 0:
+		if (switch_state == OFF)
+			lock_state = 1;
 		break;
-	case 1: if (adc2 > balance_conf.fault_adc2) lock_state = -1;
-		else if (adc1 > balance_conf.fault_adc1) lock_state = 2;
+	case 1:
+		if (adc2 > balance_conf.fault_adc2)
+			lock_state = -1;
+		else if (adc1 > balance_conf.fault_adc1)
+			lock_state = 2;
 		break;
-	case 2: if ((adc2 > balance_conf.fault_adc2) || switch_state == ON) lock_state = -1;
-		else if (switch_state == OFF) lock_state = 3;
+	case 2:
+		if ((adc2 > balance_conf.fault_adc2) || switch_state == ON)
+			lock_state = -1;
+		else if (switch_state == OFF)
+			lock_state = 3;
 		break;
-	case 3: if (adc1 > balance_conf.fault_adc1) lock_state = -1;
-		else if (adc2 > balance_conf.fault_adc2) lock_state = 4;
+	case 3:
+		if (adc1 > balance_conf.fault_adc1)
+			lock_state = -1;
+		else if (adc2 > balance_conf.fault_adc2)
+			lock_state = 4;
 		break;
-	case 4: if ((adc1 > balance_conf.fault_adc1) || switch_state == ON) lock_state = -1;
-		else if (switch_state == OFF) lock_state = 5;
+	case 4:
+		if ((adc1 > balance_conf.fault_adc1) || switch_state == ON)
+			lock_state = -1;
+		else if (switch_state == OFF)
+			lock_state = 5;
 		break;
-	case 5: if (adc2 > balance_conf.fault_adc2) lock_state = -1;
-		else if (adc1 > balance_conf.fault_adc1) lock_state = 6;
+	case 5:
+		if (adc2 > balance_conf.fault_adc2)
+			lock_state = -1;
+		else if (adc1 > balance_conf.fault_adc1)
+			lock_state = 6;
 		break;
-	case 6: if ((adc2 > balance_conf.fault_adc2) || switch_state == ON) lock_state = -1;
-		else if (switch_state == OFF) lock_state = 7;
+	case 6:
+		if ((adc2 > balance_conf.fault_adc2) || switch_state == ON)
+			lock_state = -1;
+		else if (switch_state == OFF)
+			lock_state = 7;
 		break;
-	case 7: if (adc1 > balance_conf.fault_adc1) lock_state = -1;
-		else if (adc2 > balance_conf.fault_adc2) lock_state = 8;
+	case 7:
+		if (adc1 > balance_conf.fault_adc1)
+			lock_state = -1;
+		else if (adc2 > balance_conf.fault_adc2)
+			lock_state = 8;
 		break;
 	case 8:
 		lock_state = -1;
-		is_locked = !is_locked;				// change lock from locked to non-locked or back
-		if (!is_locked || (app_get_configuration()->app_nrf_conf.channel == 99)) {
+		is_locked = !is_locked; // change lock from locked to non-locked or back
+		if (!is_locked || (app_get_configuration()->app_nrf_conf.channel == 99))
+		{
 			// Only lock if nrf channel is set to '99'
-			commands_balance_lock(is_locked);	// store to flash (in balance_conf.multi_esc)
-			if (is_locked) {
-				beep_alert(2, 1);	// beeeep-beeeep
+			commands_balance_lock(is_locked); // store to flash (in balance_conf.multi_esc)
+			if (is_locked)
+			{
+				beep_alert(2, 1); // beeeep-beeeep
 			}
-			else {
-				beep_alert(3, 0);	// beep-beep-beep
+			else
+			{
+				beep_alert(3, 0); // beep-beep-beep
 			}
 		}
 		break;
 	default:;
 	}
 
-	if (old_lock_state != lock_state) {
+	if (old_lock_state != lock_state)
+	{
 		lock_timer = current_time;
 	}
 }
 
 // Terminal commands
-static void terminal_render(int argc, const char **argv) {
-	if (argc == 2 || argc == 3) {
+static void terminal_render(int argc, const char **argv)
+{
+	if (argc == 2 || argc == 3)
+	{
 		int field = 0;
 		int graph = 1;
 		sscanf(argv[1], "%d", &field);
-		if(argc == 3){
+		if (argc == 3)
+		{
 			sscanf(argv[2], "%d", &graph);
-			if(graph < 1 || graph > 2){
+			if (graph < 1 || graph > 2)
+			{
 				graph = 1;
 			}
 		}
-		if(graph == 1){
+		if (graph == 1)
+		{
 			debug_render_1 = field;
-		}else{
+		}
+		else
+		{
 			debug_render_2 = field;
 		}
-	} else {
+	}
+	else
+	{
 		commands_printf("This command requires one or two argument(s).\n");
 	}
 }
 
-static void terminal_sample(int argc, const char **argv) {
-	if (argc == 3) {
+static void terminal_sample(int argc, const char **argv)
+{
+	if (argc == 3)
+	{
 		debug_sample_field = 0;
 		debug_sample_count = 0;
 		sscanf(argv[1], "%d", &debug_sample_field);
 		sscanf(argv[2], "%d", &debug_sample_count);
 		debug_sample_index = 0;
-	} else {
+	}
+	else
+	{
 		commands_printf("This command requires two arguments.\n");
 	}
 }
 
-static void terminal_experiment(int argc, const char **argv) {
-	if (argc == 3) {
+static void terminal_experiment(int argc, const char **argv)
+{
+	if (argc == 3)
+	{
 		int field = 0;
 		int graph = 1;
 		sscanf(argv[1], "%d", &field);
 		sscanf(argv[2], "%d", &graph);
-		switch(graph){
-			case (1):
-				debug_experiment_1 = field;
-				break;
-			case (2):
-				debug_experiment_2 = field;
-				break;
-			case (3):
-				debug_experiment_3 = field;
-				break;
-			case (4):
-				debug_experiment_4 = field;
-				break;
-			case (5):
-				debug_experiment_5 = field;
-				break;
-			case (6):
-				debug_experiment_6 = field;
-				break;
+		switch (graph)
+		{
+		case (1):
+			debug_experiment_1 = field;
+			break;
+		case (2):
+			debug_experiment_2 = field;
+			break;
+		case (3):
+			debug_experiment_3 = field;
+			break;
+		case (4):
+			debug_experiment_4 = field;
+			break;
+		case (5):
+			debug_experiment_5 = field;
+			break;
+		case (6):
+			debug_experiment_6 = field;
+			break;
 		}
 		commands_init_plot("Microseconds", "Balance App Debug Data");
 		commands_plot_add_graph("1");
@@ -1882,72 +2347,85 @@ static void terminal_experiment(int argc, const char **argv) {
 		commands_plot_add_graph("4");
 		commands_plot_add_graph("5");
 		commands_plot_add_graph("6");
-	} else {
+	}
+	else
+	{
 		commands_printf("This command requires two arguments.\n");
 	}
 }
 
 // Debug functions
-static float app_balance_get_debug(int index){
-	switch(index){
-		case(1):
-			return motor_position;
-		case(2):
-			return setpoint;
-		case(3):
-			return torquetilt_filtered_current;
-		case(4):
-			return derivative;
-		case(5):
-			return last_pitch_angle - pitch_angle;
-		case(6):
-			return motor_current;
-		case(7):
-			return erpm;
-		case(8):
-			return abs_erpm;
-		case(9):
-			return loop_time;
-		case(10):
-			return diff_time;
-		case(11):
-			return loop_overshoot;
-		case(12):
-			return filtered_loop_overshoot;
-		case(13):
-			return filtered_diff_time;
-		default:
-			return 0;
+static float app_balance_get_debug(int index)
+{
+	switch (index)
+	{
+	case (1):
+		return motor_position;
+	case (2):
+		return setpoint;
+	case (3):
+		return torquetilt_filtered_current;
+	case (4):
+		return derivative;
+	case (5):
+		return last_pitch_angle - pitch_angle;
+	case (6):
+		return motor_current;
+	case (7):
+		return erpm;
+	case (8):
+		return abs_erpm;
+	case (9):
+		return loop_time;
+	case (10):
+		return diff_time;
+	case (11):
+		return loop_overshoot;
+	case (12):
+		return filtered_loop_overshoot;
+	case (13):
+		return filtered_diff_time;
+	default:
+		return 0;
 	}
 }
-static void app_balance_sample_debug(){
-	if(debug_sample_index < debug_sample_count){
+static void app_balance_sample_debug()
+{
+	if (debug_sample_index < debug_sample_count)
+	{
 		commands_printf("%f", (double)app_balance_get_debug(debug_sample_field));
 		debug_sample_index += 1;
 	}
 }
-static void app_balance_experiment(){
-	if(debug_experiment_1 != 0){
+static void app_balance_experiment()
+{
+	if (debug_experiment_1 != 0)
+	{
 		commands_plot_set_graph(0);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_1));
 	}
-	if(debug_experiment_2 != 0){
+	if (debug_experiment_2 != 0)
+	{
 		commands_plot_set_graph(1);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_2));
 	}
-	if(debug_experiment_3 != 0){
+	if (debug_experiment_3 != 0)
+	{
 		commands_plot_set_graph(2);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_3));
 	}
-	if(debug_experiment_4 != 0){
+	if (debug_experiment_4 != 0)
+	{
 		commands_plot_set_graph(3);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_4));
 	}
-	if(debug_experiment_5 != 0){
+	if (debug_experiment_5 != 0)
+	{
 		commands_plot_set_graph(4);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_5));
 	}
-	if(debug_experiment_6 != 0){
+	if (debug_experiment_6 != 0)
+	{
 		commands_plot_set_graph(5);
 		commands_send_plot_points(ST2MS(current_time), app_balance_get_debug(debug_experiment_6));
 	}
