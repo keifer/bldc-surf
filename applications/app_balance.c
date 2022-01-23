@@ -1383,6 +1383,34 @@ static THD_FUNCTION(balance_thread, arg)
 
 			// Output to motor
 			set_current(pid_value);
+			//Led light control 
+				if (abs_erpm > balance_conf.fault_adc_half_erpm) {
+					// we're at riding speed => turn on the forward facing lights
+					if (pid_value > -4) {
+						if (erpm > 0) {
+							new_ride_state = RIDE_FORWARD;
+						}
+						else {
+							new_ride_state = RIDE_REVERSE;
+						}
+					}
+					else {
+						if (erpm > 0) {
+							new_ride_state = BRAKE_FORWARD;
+						}
+						else {
+							new_ride_state = BRAKE_REVERSE;
+						}
+					}
+				}
+				else {
+					new_ride_state = RIDE_IDLE;
+				}
+				if (new_ride_state != ride_state){
+					update_lights();
+				}
+
+
 			break;
 		case (FAULT_ANGLE_PITCH):
 		case (FAULT_ANGLE_ROLL):
