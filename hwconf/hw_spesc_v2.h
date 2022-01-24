@@ -34,11 +34,12 @@
 #define LED_RED_OFF() palClearPad(GPIOB, 1)
 
 //uses servo pin for buzzer
-#define HAS_EXT_BUZZER 1
+
+#define HAS_EXT_BUZZER  1
 #define EXT_BUZZER_ON() palSetPad(GPIOB, 6)
 #define EXT_BUZZER_OFF() palClearPad(GPIOB, 6)
 
-#define HAS_EXT_LIGHT
+#define HAS_EXT_LIGHT 
 
 #ifndef HAS_EXT_LIGHT
 
@@ -53,21 +54,12 @@
 
 #ifdef HAS_EXT_LIGHT
 // onboard Brake_light J16 connector
-#define LIGHT_FWD_ON() \
-    {                  \
-    }
-#define LIGHT_FWD_OFF() \
-    {                   \
-    }
-#define LIGHT_BACK_ON() \
-    {                   \
-    }
-#define LIGHT_BACK_OFF() \
-    {                    \
-    }
+#define LIGHT_FWD_ON() {}
+#define LIGHT_FWD_OFF() {}
+#define LIGHT_BACK_ON() {}
+#define LIGHT_BACK_OFF() {}
 #define BRAKE_LIGHT_ON() palSetPad(GPIOB, 7)
 #define BRAKE_LIGHT_OFF() palClearPad(GPIOB, 7)
-
 #endif
 
 //AUX PIN to Control Front COBLED J17 connector
@@ -275,10 +267,10 @@
 #define MCCONF_FOC_SAMPLE_V0_V7 false // Run control loop in both v0 and v7 (requires phase shunts)
 #endif
 #ifndef MCCONF_L_CURRENT_MAX
-#define MCCONF_L_CURRENT_MAX 120.0 // Current limit in Amperes (Upper)
+#define MCCONF_L_CURRENT_MAX 100 // Current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_CURRENT_MIN
-#define MCCONF_L_CURRENT_MIN -60.0 // Current limit in Amperes (Lower)
+#define MCCONF_L_CURRENT_MIN -100.0 // Current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MAX
 #define MCCONF_L_IN_CURRENT_MAX 60.0 // Input current limit in Amperes (Upper)
@@ -303,9 +295,9 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT -150.0, 150.0
+#define HW_LIM_CURRENT -120.0, 120.0
 #define HW_LIM_CURRENT_IN -80.0, 100.0
-#define HW_LIM_CURRENT_ABS 0.0, 350.0
+#define HW_LIM_CURRENT_ABS 0.0, 160.0
 #define HW_LIM_VIN 24.0, 84.0
 #define HW_LIM_ERPM -400e3, 400e3
 #define HW_LIM_DUTY_MIN 0.0, 0.1

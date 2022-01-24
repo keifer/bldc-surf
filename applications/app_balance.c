@@ -1006,52 +1006,62 @@ static void update_lights(void)
 		LIGHT_FWD_OFF();
 		LIGHT_BACK_OFF();
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
 			BRAKE_LIGHT_ON();
+		}
 		else
+		{
 			BRAKE_LIGHT_OFF();
+		}
 		break;
 	case RIDE_IDLE:
 		LIGHT_FWD_ON();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-			BRAKE_LIGHT_ON();
-		else
-			BRAKE_LIGHT_OFF();
-
 		LIGHT_BACK_ON();
+		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
+			BRAKE_LIGHT_ON();
+		}
+		else
+		{
+			BRAKE_LIGHT_OFF();
+		}
 
 		break;
 	case RIDE_FORWARD:
 		LIGHT_FWD_ON();
 		LIGHT_BACK_OFF();
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
 			BRAKE_LIGHT_ON();
+		}
 		else
+		{
 			BRAKE_LIGHT_OFF();
+		}
 
 		break;
 	case RIDE_REVERSE:
 		LIGHT_FWD_OFF();
 		LIGHT_BACK_ON();
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
 			BRAKE_LIGHT_ON();
+		}
 		else
+		{
 			BRAKE_LIGHT_OFF();
+		}
 		break;
 	case BRAKE_FORWARD:
 		LIGHT_FWD_ON();
 		LIGHT_BACK_OFF();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-			BRAKE_LIGHT_ON();
-		else
-			BRAKE_LIGHT_OFF();
+		BRAKE_LIGHT_ON();
 		break;
 	case BRAKE_REVERSE:
 		LIGHT_FWD_OFF();
 		LIGHT_BACK_ON();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-			BRAKE_LIGHT_ON();
-		else
-			BRAKE_LIGHT_OFF();
+		BRAKE_LIGHT_ON();
+
 		break;
 	}
 }
@@ -1383,34 +1393,42 @@ static THD_FUNCTION(balance_thread, arg)
 
 			// Output to motor
 			set_current(pid_value);
-			//Led light control 
-				if (abs_erpm > balance_conf.fault_adc_half_erpm) {
-					// we're at riding speed => turn on the forward facing lights
-					if (pid_value > -4) {
-						if (erpm > 0) {
-							new_ride_state = RIDE_FORWARD;
-						}
-						else {
-							new_ride_state = RIDE_REVERSE;
-						}
+			//Led light control
+			if (abs_erpm > balance_conf.fault_adc_half_erpm)
+			{
+				// we're at riding speed => turn on the forward facing lights
+				if (pid_value > -4)
+				{
+					if (erpm > 0)
+					{
+						new_ride_state = RIDE_FORWARD;
 					}
-					else {
-						if (erpm > 0) {
-							new_ride_state = BRAKE_FORWARD;
-						}
-						else {
-							new_ride_state = BRAKE_REVERSE;
-						}
+					else
+					{
+						new_ride_state = RIDE_REVERSE;
 					}
 				}
-				else {
-					new_ride_state = RIDE_IDLE;
+				else
+				{
+					if (erpm > 0)
+					{
+						new_ride_state = BRAKE_FORWARD;
+					}
+					else
+					{
+						new_ride_state = BRAKE_REVERSE;
+					}
 				}
-				if (new_ride_state != ride_state){
-					update_lights();
-				}
+			}
+			else
+			{
+				new_ride_state = RIDE_IDLE;
+			}
 
-
+			if (new_ride_state != ride_state)
+			{
+				update_lights();
+			}
 			break;
 		case (FAULT_ANGLE_PITCH):
 		case (FAULT_ANGLE_ROLL):
