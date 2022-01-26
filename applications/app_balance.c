@@ -126,7 +126,10 @@ static float motor_current;
 static float motor_position;
 static float adc1, adc2;
 static SwitchState switch_state;
-
+////fwd_light flash in RIDE_FORWARD
+static bool fwd_light_state;
+static syssts_t fwd_light_flash_time;
+static unsigned int fwd_light_flash_duration;
 // Rumtime state values
 static BalanceState state;
 int log_balance_state; // not static so we can log it
@@ -154,13 +157,12 @@ static float kp, ki, kd, kp_acc, ki_acc, kd_acc, kp_brk, ki_brk, kd_brk;
 static float autosuspend_timer, autosuspend_timeout;
 static float acceleration, last_erpm;
 static float integral_max, integral_min, shedfactor;
-
 float expacc, expki, expkd, expkp, expprop, expsetpoint, ttt;
 float exp_grunt_factor, exp_g_max, exp_g_min;
-
 static float bq_z1, bq_z2;
 static float bq_a0, bq_a1, bq_a2, bq_b1, bq_b2;
 static inline float biquad_filter(float in)
+
 {
 	float out = in * bq_a0 + bq_z1;
 	bq_z1 = in * bq_a1 + bq_z2 - bq_b1 * out;
@@ -413,6 +415,11 @@ void reset_vars(void)
 	diff_time = 0;
 	max_temp_fet = mc_interface_get_configuration()->l_temp_fet_start;
 	new_ride_state = ride_state = RIDE_OFF;
+	//fwd light
+	fwd_light_state = false;
+	//set fwd light flash time
+	fwd_light_flash_duration = 100;
+	fwd_light_flash_time = 0;
 
 	if (use_soft_start)
 	{
@@ -1005,62 +1012,69 @@ static void update_lights(void)
 	case RIDE_OFF:
 		LIGHT_FWD_OFF();
 		LIGHT_BACK_OFF();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-		{
-			BRAKE_LIGHT_ON();
-		}
-		else
-		{
-			BRAKE_LIGHT_OFF();
-		}
+		BRAKE_LIGHT_OFF();
+
 		break;
 	case RIDE_IDLE:
-		LIGHT_FWD_ON();
+
 		LIGHT_BACK_ON();
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
 		{
 			BRAKE_LIGHT_ON();
+			LIGHT_FWD_ON();
 		}
 		else
 		{
+			LIGHT_FWD_OFF();
 			BRAKE_LIGHT_OFF();
 		}
 
 		break;
 	case RIDE_FORWARD:
-		LIGHT_FWD_ON();
+
 		LIGHT_BACK_OFF();
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
 		{
+			LIGHT_FWD_ON();
 			BRAKE_LIGHT_ON();
 		}
 		else
 		{
+			if (fwd_light_state == true)
+			{
+
+				LIGHT_FWD_ON();
+			}
+			else
+			{
+				LIGHT_FWD_OFF();
+			}
+
 			BRAKE_LIGHT_OFF();
 		}
 
 		break;
 	case RIDE_REVERSE:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-		{
-			BRAKE_LIGHT_ON();
-		}
-		else
-		{
-			BRAKE_LIGHT_OFF();
-		}
+		//LIGHT_FWD_OFF();
+		//LIGHT_BACK_ON();
+		//if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		//{
+		// 	BRAKE_LIGHT_ON();
+		// }
+		// else
+		// {
+		// 	BRAKE_LIGHT_OFF();
+		// }
 		break;
 	case BRAKE_FORWARD:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_OFF();
+		//LIGHT_FWD_ON();
+		//LIGHT_BACK_OFF();
 		BRAKE_LIGHT_ON();
 		break;
 	case BRAKE_REVERSE:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
-		BRAKE_LIGHT_ON();
+		//LIGHT_FWD_OFF();
+		//LIGHT_BACK_ON();
+		//BRAKE_LIGHT_ON();
 
 		break;
 	}
@@ -1248,7 +1262,8 @@ static THD_FUNCTION(balance_thread, arg)
 			{
 				play_tune(balance_conf.deadzone == 1);
 			}
-
+			//get fwd_flash_light
+			fwd_light_flash_time = chVTGetSystemTimeX();
 			// Let the rider know that the board is ready
 			beep_on(1);
 			chThdSleepMilliseconds(100);
@@ -1394,14 +1409,23 @@ static THD_FUNCTION(balance_thread, arg)
 			// Output to motor
 			set_current(pid_value);
 			//Led light control
+
 			if (abs_erpm > balance_conf.fault_adc_half_erpm)
 			{
+
 				// we're at riding speed => turn on the forward facing lights
 				if (pid_value > -4)
 				{
 					if (erpm > 0)
 					{
 						new_ride_state = RIDE_FORWARD;
+						if (chVTGetSystemTimeX() - fwd_light_flash_time >= MS2ST(200))
+						{
+							fwd_light_flash_time = chVTGetSystemTimeX();
+							update_lights();
+							fwd_light_state = !fwd_light_state;
+						}
+						//fwd_light_flash_time = chVTGetSystemTimeX();
 					}
 					else
 					{
@@ -1429,6 +1453,7 @@ static THD_FUNCTION(balance_thread, arg)
 			{
 				update_lights();
 			}
+
 			break;
 		case (FAULT_ANGLE_PITCH):
 		case (FAULT_ANGLE_ROLL):

@@ -54,8 +54,8 @@
 
 #ifdef HAS_EXT_LIGHT
 // onboard Brake_light J16 connector
-#define LIGHT_FWD_ON() {}
-#define LIGHT_FWD_OFF() {}
+#define LIGHT_FWD_ON() palSetPad(GPIOB, 5) 
+#define LIGHT_FWD_OFF() palClearPad(GPIOB, 5)
 #define LIGHT_BACK_ON() {}
 #define LIGHT_BACK_OFF() {}
 #define BRAKE_LIGHT_ON() palSetPad(GPIOB, 7)
