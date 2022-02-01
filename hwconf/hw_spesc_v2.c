@@ -54,45 +54,27 @@ void hw_init_gpio(void)
 					  PAL_STM32_OSPEED_HIGHEST);
 	EXT_BUZZER_OFF();
 	// Front/RearLights
-#ifndef HAS_EXT_LIGHT
+#ifdef HAS_EXT_LIGHT
 	// Forward/Backward Lights
-	palSetPadMode(GPIOC, 13,
+	palSetPadMode(GPIOB, 5,
 				  PAL_MODE_OUTPUT_PUSHPULL |
 					  PAL_STM32_OSPEED_HIGHEST);
-	LIGHT_FWD_OFF();
-	palSetPadMode(GPIOC, 14,
-				  PAL_MODE_OUTPUT_PUSHPULL |
-					  PAL_STM32_OSPEED_HIGHEST);
-	LIGHT_BACK_OFF();
-	palSetPadMode(GPIOA, 15,
-				  PAL_MODE_OUTPUT_PUSHPULL |
-					  PAL_STM32_OSPEED_HIGHEST);
-	BRAKE_LIGHT_OFF();
-#else
+	
 	palSetPadMode(GPIOB, 7,
 				  PAL_MODE_OUTPUT_PUSHPULL |
 					  PAL_STM32_OSPEED_HIGHEST);
+	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
 	chThdSleepMilliseconds(100);
+	LIGHT_FWD_OFF();
 	BRAKE_LIGHT_OFF();
 	chThdSleepMilliseconds(100);
+	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
 	chThdSleepMilliseconds(100);
+	LIGHT_FWD_OFF();
 	BRAKE_LIGHT_OFF();
 #endif
-
-	//aux to control J17 COB led
-
-	palSetPadMode(AUX_GPIO, AUX_PIN,
-				  PAL_MODE_OUTPUT_PUSHPULL |
-					  PAL_STM32_OSPEED_HIGHEST);
-	AUX_ON();
-	chThdSleepMilliseconds(100);
-	AUX_OFF();
-	chThdSleepMilliseconds(100);
-	AUX_ON();
-	chThdSleepMilliseconds(100);
-	AUX_OFF();
 	
 	// GPIOA Configuration: Channel 1 to 3 as alternate function push-pull
 	palSetPadMode(GPIOA, 8, PAL_MODE_ALTERNATE(GPIO_AF_TIM1) | PAL_STM32_OSPEED_HIGHEST | PAL_STM32_PUDR_FLOATING);

@@ -127,9 +127,13 @@ static float motor_position;
 static float adc1, adc2;
 static SwitchState switch_state;
 ////light twinkling var
-static bool fwd_light_state;
-static bool brake_light_state;
-static syssts_t fwd_light_blink_timer, brake_light_blink_timer, fwd_light_blink_duration_MS;
+static bool brake_light_state, fwd_light_state;
+static syssts_t fwd_light_blink_timer, brake_light_blink_timer, beep_timer;
+static unsigned int fwd_light_blink_duration_MS;
+#ifdef HAS_EXT_BUZZER
+static syssts_t beep_duration_MS, beep_timer;
+static bool beep_state;
+#endif
 // Rumtime state values
 static BalanceState state;
 int log_balance_state; // not static so we can log it
@@ -146,6 +150,7 @@ static int booster_beeping = 0;
 static SetpointAdjustmentType setpointAdjustmentType;
 static systime_t current_time, last_time, diff_time;
 static systime_t fault_angle_pitch_timer, fault_angle_roll_timer, fault_switch_timer, fault_switch_half_timer, fault_duty_timer, softstart_timer;
+
 static float d_pt1_state, d_pt1_k;
 static float max_temp_fet;
 static bool use_soft_start;
@@ -422,6 +427,12 @@ void reset_vars(void)
 	fwd_light_blink_duration_MS = 0;
 	fwd_light_blink_timer = 0;
 	brake_light_blink_timer = 0;
+#ifdef HAS_EXT_BUZZER
+	beep_state = 0;
+	beep_timer = 0;
+	beep_duration_MS = 0;
+
+#endif
 
 	if (use_soft_start)
 	{
@@ -1013,15 +1024,23 @@ static void update_lights(void)
 	{
 
 	case RIDE_OFF:
-		LIGHT_FWD_OFF();
-		LIGHT_BACK_OFF();
-		BRAKE_LIGHT_OFF();
+		LIGHT_BACK_ON();
+		if (mc_interface_get_configuration()->m_out_aux_mode == 1)
+		{
+			BRAKE_LIGHT_ON();
+			LIGHT_FWD_ON();
+		}
+		else
+		{
+			LIGHT_FWD_OFF();
+			BRAKE_LIGHT_OFF();
+		}
 
 		break;
 	case RIDE_IDLE:
 
 		LIGHT_BACK_ON();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		if (mc_interface_get_configuration()->m_out_aux_mode == 1)
 		{
 			BRAKE_LIGHT_ON();
 			LIGHT_FWD_ON();
@@ -1036,7 +1055,7 @@ static void update_lights(void)
 	case RIDE_FORWARD:
 
 		LIGHT_BACK_OFF();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		if (mc_interface_get_configuration()->m_out_aux_mode == 1)
 		{
 			LIGHT_FWD_ON();
 			BRAKE_LIGHT_ON();
@@ -1050,18 +1069,7 @@ static void update_lights(void)
 
 		break;
 	case RIDE_REVERSE:
-		LIGHT_BACK_OFF();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-		{
-			LIGHT_FWD_ON();
-			BRAKE_LIGHT_ON();
-		}
-		else
-		{
-			fwd_light_state ? (BRAKE_LIGHT_ON()) : (BRAKE_LIGHT_OFF());
 
-			LIGHT_FWD_OFF();
-		}
 
 		break;
 	case BRAKE_FORWARD:
@@ -1070,7 +1078,7 @@ static void update_lights(void)
 		break;
 	case BRAKE_REVERSE:
 
-		brake_light_state ? (LIGHT_FWD_ON()) : (LIGHT_FWD_OFF());
+		//brake_light_state ? (LIGHT_FWD_ON()) : (LIGHT_FWD_OFF());
 
 		break;
 	}
@@ -1111,7 +1119,7 @@ static THD_FUNCTION(balance_thread, arg)
 {
 	(void)arg;
 	chRegSetThreadName("APP_BALANCE");
-
+	update_lights();
 	while (!chThdShouldTerminateX())
 	{
 		// Update times
@@ -1404,11 +1412,6 @@ static THD_FUNCTION(balance_thread, arg)
 			// Output to motor
 			set_current(pid_value);
 
-			if (fwd_light_blink_timer == 0)
-			{
-				fwd_light_blink_timer = current_time;
-			}
-
 			//Led light control
 			if (abs_erpm > balance_conf.fault_adc_half_erpm)
 			{
@@ -1421,46 +1424,33 @@ static THD_FUNCTION(balance_thread, arg)
 					if (erpm > 0)
 					{
 						new_ride_state = RIDE_FORWARD;
-					}
-					else
-					{
-						new_ride_state = RIDE_REVERSE;
-					}
-					//calculate blink time based on abs_erpm
-					if (ST2MS(current_time - fwd_light_blink_timer) > ST2MS(fwd_light_blink_duration_MS))
-					{
 
-						if (abs_erpm >= 4000)
-						{
-							fwd_light_blink_duration_MS = 50;
-						}
-						else
-						{
-							fwd_light_blink_duration_MS = ((1 - (erpm - balance_conf.fault_adc_half_erpm) / 4000)) * 3000;
-						}
-
-						fwd_light_state = !fwd_light_state;
-
-						if (fwd_light_state)
+						if (ST2MS(current_time - fwd_light_blink_timer) > fwd_light_blink_duration_MS)
 						{
 							if (mc_interface_get_configuration()->m_out_aux_mode == 2)
 							{
 								beep_alert(1, 0);
 							}
+
+							update_lights();
+
+							if (erpm - (float)balance_conf.fault_adc_half_erpm > 2000)
+							{
+								fwd_light_blink_duration_MS = 250;
+							}
 							else
 							{
-
-								EXT_BUZZER_ON();
+								fwd_light_blink_duration_MS = (unsigned int)utils_map(erpm - (float)balance_conf.fault_adc_half_erpm, 0, 2000, 1000, 250);
 							}
-						}
-						else
-						{
 
-							EXT_BUZZER_OFF();
-						}
+							fwd_light_state = !fwd_light_state;
 
-						update_lights();
-						fwd_light_blink_timer = current_time;
+							fwd_light_blink_timer = current_time;
+						}
+					}
+					else
+					{
+						new_ride_state = RIDE_REVERSE;
 					}
 				}
 				else
@@ -1474,8 +1464,8 @@ static THD_FUNCTION(balance_thread, arg)
 					{
 						new_ride_state = BRAKE_REVERSE;
 					}
-					
-					if (ST2MS(current_time - brake_light_blink_timer) >= ST2MS(100))
+
+					if (ST2MS(current_time - brake_light_blink_timer) >= 100)
 					{
 
 						brake_light_blink_timer = current_time;
@@ -1490,7 +1480,11 @@ static THD_FUNCTION(balance_thread, arg)
 			}
 
 			if (new_ride_state != ride_state)
+
 			{
+				//beep_timer = 0;
+				//fwd_light_blink_timer = 0;
+				//brake_light_blink_timer = 0;
 				update_lights();
 			}
 

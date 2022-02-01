@@ -41,16 +41,6 @@
 
 #define HAS_EXT_LIGHT 
 
-#ifndef HAS_EXT_LIGHT
-
-#define LIGHT_FWD_ON() palSetPad(GPIOC, 13)
-#define LIGHT_FWD_OFF() palClearPad(GPIOC, 13)
-#define LIGHT_BACK_ON() palSetPad(GPIOC, 14)
-#define LIGHT_BACK_OFF() palClearPad(GPIOC, 14)
-#define BRAKE_LIGHT_ON() palSetPad(GPIOA, 15)
-#define BRAKE_LIGHT_OFF() palClearPad(GPIOA, 15)
-
-#endif
 
 #ifdef HAS_EXT_LIGHT
 // onboard Brake_light J16 connector
@@ -60,13 +50,21 @@
 #define LIGHT_BACK_OFF() {}
 #define BRAKE_LIGHT_ON() palSetPad(GPIOB, 7)
 #define BRAKE_LIGHT_OFF() palClearPad(GPIOB, 7)
+#else
+#define LIGHT_FWD_ON() {}
+#define LIGHT_FWD_OFF() {}
+#define LIGHT_BACK_ON() {}
+#define LIGHT_BACK_OFF() {}
+#define BRAKE_LIGHT_ON() {}
+#define BRAKE_LIGHT_OFF() {}
+
 #endif
 
 //AUX PIN to Control Front COBLED J17 connector
-#define AUX_GPIO GPIOB
-#define AUX_PIN 5
-#define AUX_ON() palSetPad(AUX_GPIO, AUX_PIN)
-#define AUX_OFF() palClearPad(AUX_GPIO, AUX_PIN)
+//#define AUX_GPIO GPIOB
+//#define AUX_PIN 5
+#define AUX_ON() {}
+#define AUX_OFF() {}
 
 /*
  * ADC Vector

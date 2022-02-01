@@ -10,7 +10,7 @@
 #endif
 
 // TODO: Make this configurable from the app
-#define ALERT_MIN_BEEP_MS 1200
+#define ALERT_MIN_BEEP_MS 200
 
 #define BEEP_SHORT 0
 #define BEEP_LONG 1
