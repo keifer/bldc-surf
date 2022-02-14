@@ -75,7 +75,6 @@ void hw_init_gpio(void)
 	chThdSleepMilliseconds(200);
 	BRAKE_LIGHT_OFF();
 	LIGHT_FWD_OFF();
-
 #endif
 
 	// GPIOA Configuration: Channel 1 to 3 as alternate function push-pull

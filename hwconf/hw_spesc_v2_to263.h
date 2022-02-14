@@ -17,8 +17,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
 
-#ifndef HW_SPESC_V2
-#define HW_SPESC_V2
+#ifndef HW_SPESC_V2_TO263
+#define HW_SPESC_V2_TO263
 
 #define HW_NAME "SPEsc V2(TO-263)"
 #define INVERTED_SHUNT_POLARITY
@@ -285,4 +285,4 @@
 #define HW_LIM_DUTY_MAX 0.0, 0.95
 #define HW_LIM_TEMP_FET -40.0, 120.0
 
-#endif /* HW_RAIDEN7 */
+#endif /* HW_SPESC_V2_TO263*/

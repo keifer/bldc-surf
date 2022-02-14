@@ -17,8 +17,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
 
-#ifndef HW_SPESC_V2
-#define HW_SPESC_V2
+#ifndef HW_SPESC_V2_HSOF8
+#define HW_SPESC_V2_HSOF8
 
 #define HW_NAME "SPEsc V2(HSOF8)"
 #define INVERTED_SHUNT_POLARITY
@@ -27,7 +27,7 @@
 #define HW_HAS_3_SHUNTS
 #define HW_USE_INTERNAL_RC
 #define HW_DEAD_TIME_NSEC 660.0
-#define HW_HAS_LIGHT
+
 
 // Macros
 #define LED_GREEN_ON() palSetPad(GPIOB, 0)
@@ -38,18 +38,15 @@
 #define HAS_EXT_BUZZER 1
 #define EXT_BUZZER_ON() palSetPad(GPIOB, 6)
 #define EXT_BUZZER_OFF() palClearPad(GPIOB, 6)
-//light
+//Enable J17 J16 COB LED
+#define HW_HAS_LIGHT
 #ifdef HW_HAS_LIGHT
 #define LIGHT_FWD_ON() palSetPad(GPIOB, 5)
 #define LIGHT_FWD_OFF() palClearPad(GPIOB, 5)
 #define BRAKE_LIGHT_ON() palSetPad(GPIOB, 7)
 #define BRAKE_LIGHT_OFF() palClearPad(GPIOB, 7)
 #endif
-//In the VESC_tool  , Motor settings -> General -> Advanced -> Auxiliary Output Mode -> off or on to contorl front light .
-#define AUX_GPIO GPIOB
-#define AUX_PIN 5
-#define AUX_ON() {}
-#define AUX_OFF() {}
+
 /*
  * ADC Vector
  *
@@ -285,4 +282,4 @@
 #define HW_LIM_DUTY_MAX 0.0, 0.95
 #define HW_LIM_TEMP_FET -40.0, 120.0
 
-#endif /* HW_RAIDEN7 */
+#endif /* HW_SPESC_V2_HSOF8 */

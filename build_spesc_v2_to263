@@ -17,5 +17,5 @@ touch conf_general.h
 make -j8 build_args='-DHW_SOURCE=\"hw_spesc_v2_to263.c\" -DHW_HEADER=\"hw_spesc_v2_to263.h\"' USE_VERBOSE_COMPILE=no
 cd $DIR
 cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
-cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_SPEsc_v2_79_to263`date "+%m%d"`.bin
+cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_SPEsc_v2_79_to263_`date "+%m%d"`.bin
 
