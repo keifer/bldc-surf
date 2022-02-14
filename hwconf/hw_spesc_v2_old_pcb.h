@@ -17,17 +17,17 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
     */
 
-#ifndef HW_SPESC_V2
-#define HW_SPESC_V2
+#ifndef HW_SPESC_V2_OLD_PCB
+#define HW_SPESC_V2_OLD_PCB
 
-#define HW_NAME "SPEsc V2(TO-263)"
+#define HW_NAME "SPEsc V2(OLD)"
 #define INVERTED_SHUNT_POLARITY
 
 // HW properties
 #define HW_HAS_3_SHUNTS
 #define HW_USE_INTERNAL_RC
-#define HW_DEAD_TIME_NSEC 700.0
-#define HW_HAS_LIGHT
+#define HW_DEAD_TIME_NSEC 660.0
+//#define HW_HAS_LIGHT
 
 // Macros
 #define LED_GREEN_ON() palSetPad(GPIOB, 0)
@@ -35,7 +35,7 @@
 #define LED_RED_ON() palSetPad(GPIOB, 1)
 #define LED_RED_OFF() palClearPad(GPIOB, 1)
 //uses servo pin for buzzer
-#define HAS_EXT_BUZZER 1
+//#define HAS_EXT_BUZZER 1
 #define EXT_BUZZER_ON() palSetPad(GPIOB, 6)
 #define EXT_BUZZER_OFF() palClearPad(GPIOB, 6)
 //light
@@ -46,10 +46,10 @@
 #define BRAKE_LIGHT_OFF() palClearPad(GPIOB, 7)
 #endif
 //In the VESC_tool  , Motor settings -> General -> Advanced -> Auxiliary Output Mode -> off or on to contorl front light .
-#define AUX_GPIO GPIOB
-#define AUX_PIN 5
-#define AUX_ON() {}
-#define AUX_OFF() {}
+//#define AUX_GPIO GPIOB
+//#define AUX_PIN 5
+//#define AUX_ON() {}
+//#define AUX_OFF() {}
 /*
  * ADC Vector
  *
@@ -244,17 +244,17 @@
 #endif
 
 #ifndef MCCONF_L_MAX_ABS_CURRENT
-#define MCCONF_L_MAX_ABS_CURRENT 150.0 // The maximum absolute current above which a fault is generated
+#define MCCONF_L_MAX_ABS_CURRENT 200.0 // The maximum absolute current above which a fault is generated
 #endif
 
 #ifndef MCCONF_FOC_SAMPLE_V0_V7 
 #define MCCONF_FOC_SAMPLE_V0_V7 false // Run control loop in both v0 and v7 (requires phase shunts)
 #endif
 #ifndef MCCONF_L_CURRENT_MAX
-#define MCCONF_L_CURRENT_MAX 120.0 // Current limit in Amperes (Upper)
+#define MCCONF_L_CURRENT_MAX 160.0 // Current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_CURRENT_MIN
-#define MCCONF_L_CURRENT_MIN -60.0 // Current limit in Amperes (Lower)
+#define MCCONF_L_CURRENT_MIN -160.0 // Current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MAX
 #define MCCONF_L_IN_CURRENT_MAX 60.0 // Input current limit in Amperes (Upper)
@@ -276,13 +276,13 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT -120.0, 120.0
-#define HW_LIM_CURRENT_IN -80.0, 100.0
-#define HW_LIM_CURRENT_ABS 0.0, 150.0
+#define HW_LIM_CURRENT -160.0, 160.0
+#define HW_LIM_CURRENT_IN -20.0, 60.0
+#define HW_LIM_CURRENT_ABS 0.0, 200.0
 #define HW_LIM_VIN 24.0, 84.0
 #define HW_LIM_ERPM -300e3, 300e3
 #define HW_LIM_DUTY_MIN 0.0, 0.1
 #define HW_LIM_DUTY_MAX 0.0, 0.95
 #define HW_LIM_TEMP_FET -40.0, 120.0
 
-#endif /* HW_RAIDEN7 */
+#endif /* HW_SPESC_V2_OLD_PCB*/

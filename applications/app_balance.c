@@ -193,7 +193,10 @@ static systime_t brake_timeout;
 static float accelhist[ACCEL_ARRAY_SIZE];
 static int accelidx;
 static float accelavg;
+#ifdef HW_HAS_LIGHT
 static RideState ride_state, new_ride_state;
+#endif
+
 // Lock
 static int lock_state;
 static bool is_locked;
@@ -670,8 +673,10 @@ static void reset_vars(void)
 	center_stiffness_delay_ms = START_CENTER_DELAY_MS;
 	center_jerk_counter = 0;
 	center_jerk_adder = 0;
-	// for light
+// for light
+#ifdef HW_HAS_LIGHT
 	new_ride_state = ride_state = RIDE_OFF;
+#endif
 }
 
 static float get_setpoint_adjustment_step_size(void)
@@ -1579,6 +1584,7 @@ static void apply_turntilt(void)
 	setpoint += turntilt_interpolated;
 }
 
+#ifdef HW_HAS_LIGHT
 // update light
 static void update_lights(void)
 {
@@ -1587,32 +1593,41 @@ static void update_lights(void)
 	{
 	case RIDE_OFF:
 		LIGHT_FWD_OFF();
-		LIGHT_BACK_OFF();
-		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
-			BRAKE_LIGHT_ON();
-		else
-			BRAKE_LIGHT_OFF();
+		BRAKE_LIGHT_OFF();
 
 		break;
 	case RIDE_IDLE:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_ON();
+
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
 			BRAKE_LIGHT_ON();
+			LIGHT_FWD_ON();
+		}
+
 		else
+		{
 			BRAKE_LIGHT_OFF();
+			LIGHT_FWD_OFF();
+		}
 		break;
 	case RIDE_FORWARD:
-		LIGHT_FWD_ON();
-		LIGHT_BACK_OFF();
+
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
+		{
 			BRAKE_LIGHT_ON();
+			LIGHT_FWD_ON();
+		}
+
 		else
+		{
 			BRAKE_LIGHT_OFF();
+			LIGHT_FWD_OFF();
+		}
+	
 		break;
 	case RIDE_REVERSE:
 		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
+
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
 			BRAKE_LIGHT_ON();
 		else
@@ -1620,7 +1635,7 @@ static void update_lights(void)
 		break;
 	case BRAKE_FORWARD:
 		LIGHT_FWD_ON();
-		LIGHT_BACK_OFF();
+
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
 			BRAKE_LIGHT_ON();
 		else
@@ -1628,7 +1643,7 @@ static void update_lights(void)
 		break;
 	case BRAKE_REVERSE:
 		LIGHT_FWD_OFF();
-		LIGHT_BACK_ON();
+
 		if (mc_interface_get_configuration()->m_out_aux_mode > 0)
 			BRAKE_LIGHT_ON();
 		else
@@ -1636,6 +1651,8 @@ static void update_lights(void)
 		break;
 	}
 }
+
+#endif
 
 static void brake(void)
 {
@@ -1653,9 +1670,11 @@ static void brake(void)
 	timeout_reset();
 	// Set current
 	mc_interface_set_brake_current(balance_conf.brake_current);
-	// light status
+// light status
+#ifdef HW_HAS_LIGHT
 	new_ride_state = RIDE_OFF;
 	update_lights();
+#endif
 }
 
 static void set_current(float current)
@@ -1672,7 +1691,9 @@ static THD_FUNCTION(balance_thread, arg)
 {
 	(void)arg;
 	chRegSetThreadName("APP_BALANCE");
-
+#ifdef HW_HAS_LIGHT
+	update_lights();
+#endif
 	while (!chThdShouldTerminateX())
 	{
 		// Update times
@@ -2057,7 +2078,8 @@ static THD_FUNCTION(balance_thread, arg)
 			{
 				set_current(pid_value);
 			}
-			// light state
+// light state
+#ifdef HW_HAS_LIGHT
 			if (abs_erpm > balance_conf.fault_adc_half_erpm)
 			{
 				// we're at riding speed => turn on the forward facing lights
@@ -2092,6 +2114,7 @@ static THD_FUNCTION(balance_thread, arg)
 			{
 				update_lights();
 			}
+#endif
 
 			break;
 		case (FAULT_ANGLE_PITCH):
@@ -2136,14 +2159,19 @@ static THD_FUNCTION(balance_thread, arg)
 
 			check_lock();
 
-			// Check for valid startup position and switch state
+// Check for valid startup position and switch state
+#ifdef HW_HAS_LIGHT
 			new_ride_state = RIDE_OFF;
+#endif
 			if (is_locked == false &&
 				fabsf(pitch_angle) < balance_conf.startup_pitch_tolerance &&
 				fabsf(roll_angle) < balance_conf.startup_roll_tolerance && switch_state == ON)
 			{
 				reset_vars();
+#ifdef HW_HAS_LIGHT
 				update_lights();
+#endif
+
 				break;
 			}
 			// Disable output
@@ -2151,7 +2179,10 @@ static THD_FUNCTION(balance_thread, arg)
 			break;
 		case (FAULT_DUTY):
 			log_balance_state = FAULT_DUTY;
+#ifdef HW_HAS_LIGHT
 			new_ride_state = RIDE_OFF;
+#endif
+
 			// We need another fault to clear duty fault.
 			// Otherwise duty fault will clear itself as soon as motor pauses, then motor will spool up again.
 			// Rendering this fault useless.

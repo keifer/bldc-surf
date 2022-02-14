@@ -188,8 +188,10 @@
 //#define HW_HEADER "hw_60v2_alva.h"
 
 
-#define HW_SOURCE "hw_spesc_v2.c"
-#define HW_HEADER "hw_spesc_v2.h"
+//#define HW_SOURCE "hw_spesc_v2.c"
+//#define HW_HEADER "hw_spesc_v2.h"
+#define HW_SOURCE "hw_spesc_v2_old_pcb.c"
+#define HW_HEADER "hw_spesc_v2_old_pcb.h"
 
 
 #endif

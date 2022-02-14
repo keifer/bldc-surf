@@ -55,7 +55,6 @@ void hw_init_gpio(void)
 				  PAL_MODE_OUTPUT_PUSHPULL |
 					  PAL_STM32_OSPEED_HIGHEST);
 	EXT_BUZZER_OFF();
-
 #ifdef HW_HAS_LIGHT
 	//init light
 	palSetPadMode(GPIOB, 7,
@@ -66,13 +65,13 @@ void hw_init_gpio(void)
 					  PAL_STM32_OSPEED_HIGHEST);
 	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
-	chThdSleepMilliseconds(200);
+	chThdSleepMicroseconds(200);
 	BRAKE_LIGHT_OFF();
 	LIGHT_FWD_OFF();
-	chThdSleepMilliseconds(200);
+	chThdSleepMicroseconds(200);
 	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
-	chThdSleepMilliseconds(200);
+	chThdSleepMicroseconds(200);
 	BRAKE_LIGHT_OFF();
 	LIGHT_FWD_OFF();
 
