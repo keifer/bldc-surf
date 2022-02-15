@@ -1,0 +1,21 @@
+#!/bin/bash
+set -xe
+
+DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+
+#################### Bridge Switch ########################
+# Clean
+cd $DIR
+make clean
+
+COPYDIR=build_all/Bridge_SW
+mkdir -p $DIR/$COPYDIR
+rm -f $DIR/$COPYDIR/*
+
+# default
+touch conf_general.h
+make -j8 build_args='-DHW_SOURCE=\"hw_bridge_sw.c\" -DHW_HEADER=\"hw_bridge_sw.h\"' USE_VERBOSE_COMPILE=no
+cd $DIR
+cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_default.bin
+cp $DIR/build/BLDC_4_ChibiOS.bin $COPYDIR/VESC_bridge_sw_`date "+%m%d"`.bin
+
