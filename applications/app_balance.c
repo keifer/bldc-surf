@@ -1024,7 +1024,7 @@ static void update_lights(void)
 	{
 
 	case RIDE_OFF:
-		LIGHT_BACK_ON();
+	
 		if (mc_interface_get_configuration()->m_out_aux_mode == 1)
 		{
 			BRAKE_LIGHT_ON();
@@ -1039,7 +1039,6 @@ static void update_lights(void)
 		break;
 	case RIDE_IDLE:
 
-		LIGHT_BACK_ON();
 		if (mc_interface_get_configuration()->m_out_aux_mode == 1)
 		{
 			BRAKE_LIGHT_ON();
