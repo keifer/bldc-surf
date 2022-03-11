@@ -26,7 +26,7 @@
 // HW properties
 #define HW_HAS_3_SHUNTS
 #define HW_USE_INTERNAL_RC
-#define HW_DEAD_TIME_NSEC 660.0
+#define HW_DEAD_TIME_NSEC 1000.0
 
 
 // Macros
