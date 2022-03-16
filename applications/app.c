@@ -71,12 +71,12 @@ void app_set_configuration(app_configuration *conf) {
 
 	imu_init(&conf->imu_conf);
 
-	if (appconf.app_to_use != APP_PPM &&
-			appconf.app_to_use != APP_PPM_UART &&
-			appconf.servo_out_enable) {
-		servo_simple_init();
+	if (appconf.servo_out_enable) {
+		// DCDC enable
+		palSetPad(GPIOD, 2);
 	} else {
-		servo_simple_stop();
+		// DCDC disable
+		palClearPad(GPIOD, 2);
 	}
 
 	// Configure balance app before starting it.
