@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "conf_general.h": "c",
+        "app.h": "c"
+    }
+}

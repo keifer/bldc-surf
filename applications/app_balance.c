@@ -1613,11 +1613,10 @@ static void update_lights(void)
 		break;
 	case RIDE_IDLE:
 
-		if (mc_interface_get_configuration()->m_out_aux_mode == 5 )
+		if (mc_interface_get_configuration()->m_out_aux_mode == 1 || mc_interface_get_configuration()->m_out_aux_mode == 2 )
 		{
-
-			BRAKE_LIGHT_ON();
-			LIGHT_FWD_ON();
+		LIGHT_FWD_ON();
+		BRAKE_LIGHT_ON();
 		}
 		else
 		{
@@ -1627,16 +1626,15 @@ static void update_lights(void)
 
 		break;
 	case RIDE_FORWARD:
-		//mc_interface_get_configuration()->m_out_aux_mode = OUT_AUX_MODE_ON_WHEN_RUNNING
-
 		
-		if (mc_interface_get_configuration()->m_out_aux_mode == 5 )
+		
+		if (mc_interface_get_configuration()->m_out_aux_mode == 1 ||  mc_interface_get_configuration()->m_out_aux_mode == 2 )
 		{
 			LIGHT_FWD_ON();
 			BRAKE_LIGHT_ON();
 		}
 		else 
-		{//mc_interface_get_configuration()->m_out_aux_mode = OUT_AUX_MODE_ON_WHEN_NOT_RUNNING
+		{
 			fwd_light_state ? (LIGHT_FWD_ON()) : (LIGHT_FWD_OFF());
 
 			BRAKE_LIGHT_OFF();
@@ -1644,7 +1642,17 @@ static void update_lights(void)
 
 		break;
 	case RIDE_REVERSE:
+	if (mc_interface_get_configuration()->m_out_aux_mode == 1 ||  mc_interface_get_configuration()->m_out_aux_mode == 2 )
+		{
+			LIGHT_FWD_ON();
+			BRAKE_LIGHT_ON();
+		}
+		else 
+		{//mc_interface_get_configuration()->m_out_aux_mode = OUT_AUX_MODE_ON_WHEN_NOT_RUNNING
+			fwd_light_state ? (BRAKE_LIGHT_ON()) : (BRAKE_LIGHT_OFF());
 
+			LIGHT_FWD_OFF();
+		}
 		break;
 	case BRAKE_FORWARD:
 
@@ -1652,7 +1660,7 @@ static void update_lights(void)
 		break;
 	case BRAKE_REVERSE:
 
-		//brake_light_state ? (LIGHT_FWD_ON()) : (LIGHT_FWD_OFF());
+		brake_light_state ? (LIGHT_FWD_ON()) : (LIGHT_FWD_OFF());
 
 		break;
 	}
@@ -2103,7 +2111,7 @@ static THD_FUNCTION(balance_thread, arg)
 
 						if (ST2MS(current_time - fwd_light_blink_timer) > fwd_light_blink_duration_MS)
 						{
-							if (mc_interface_get_configuration()->m_out_aux_mode == 5 || mc_interface_get_configuration()->m_out_aux_mode == 6 )
+							if (mc_interface_get_configuration()->m_out_aux_mode == 2 || mc_interface_get_configuration()->m_out_aux_mode == 3 )
 							{
 								beep_alert(1, 0);
 							}
@@ -2322,7 +2330,7 @@ static void check_lock()
 		if (!is_locked || (app_get_configuration()->app_nrf_conf.channel == 99))
 		{
 			// Only lock if nrf channel is set to '99'
-			commands_balance_lock(is_locked); // store to flash (in balance_conf.multi_esc)
+			//commands_balance_lock(is_locked); // store to flash (in balance_conf.multi_esc)
 			if (is_locked)
 			{
 				beep_alert(2, 1); // beeeep-beeeep
@@ -2331,6 +2339,8 @@ static void check_lock()
 			{
 				beep_alert(3, 0); // beep-beep-beep
 			}
+				// Only lock if nrf channel is set to '99'
+			commands_balance_lock(is_locked); // store to flash (in balance_conf.multi_esc)
 		}
 		break;
 	default:;
