@@ -104,7 +104,7 @@
 #define CURRENT_AMP_GAIN 20.0
 #endif
 #ifndef CURRENT_SHUNT_RES
-#define CURRENT_SHUNT_RES 0.0005
+#define CURRENT_SHUNT_RES 0.00025  // 0.5mR *2 for IPT020N10N5 TOLL package 
 #endif
 
 // Input voltage
@@ -244,23 +244,23 @@
 #endif
 
 #ifndef MCCONF_L_MAX_ABS_CURRENT
-#define MCCONF_L_MAX_ABS_CURRENT 120.0 // The maximum absolute current above which a fault is generated
+#define MCCONF_L_MAX_ABS_CURRENT 200.0 // The maximum absolute current above which a fault is generated
 #endif
 
 #ifndef MCCONF_FOC_SAMPLE_V0_V7 
 #define MCCONF_FOC_SAMPLE_V0_V7 false // Run control loop in both v0 and v7 (requires phase shunts)
 #endif
 #ifndef MCCONF_L_CURRENT_MAX
-#define MCCONF_L_CURRENT_MAX 100.0 // Current limit in Amperes (Upper)
+#define MCCONF_L_CURRENT_MAX 200.0 // Current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_CURRENT_MIN
-#define MCCONF_L_CURRENT_MIN -100.0 // Current limit in Amperes (Lower)
+#define MCCONF_L_CURRENT_MIN -200.0 // Current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MAX
 #define MCCONF_L_IN_CURRENT_MAX 60.0 // Input current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MIN
-#define MCCONF_L_IN_CURRENT_MIN -20.0 // Input current limit in Amperes (Lower)
+#define MCCONF_L_IN_CURRENT_MIN -60.0 // Input current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_MIN_VOLTAGE
 #define MCCONF_L_MIN_VOLTAGE 24.0 // Minimum input voltage
@@ -276,9 +276,9 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT -100.0, 100.0
+#define HW_LIM_CURRENT -200.0, 200.0
 #define HW_LIM_CURRENT_IN -80.0, 100.0
-#define HW_LIM_CURRENT_ABS 0.0, 120.0
+#define HW_LIM_CURRENT_ABS 0.0, 200.0
 #define HW_LIM_VIN 24.0, 76.0
 #define HW_LIM_ERPM -300e3, 300e3
 #define HW_LIM_DUTY_MIN 0.0, 0.1
