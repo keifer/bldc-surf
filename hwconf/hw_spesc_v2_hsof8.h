@@ -242,7 +242,7 @@
 
 #ifndef MCCONF_L_MAX_ABS_CURRENT
 
-#define MCCONF_L_MAX_ABS_CURRENT 135.0 //The maximum absolute current above which a fault is generated , Use FDBL0630N150 150V/169A mosfet 
+#define MCCONF_L_MAX_ABS_CURRENT 130.0 //The maximum absolute current above which a fault is generated , Use FDBL0630N150 150V/169A mosfet 
 
 #endif
 
@@ -250,10 +250,10 @@
 #define MCCONF_FOC_SAMPLE_V0_V7 false // Run control loop in both v0 and v7 (requires phase shunts)
 #endif
 #ifndef MCCONF_L_CURRENT_MAX
-#define MCCONF_L_CURRENT_MAX 135.0 // Current limit in Amperes (Upper)
+#define MCCONF_L_CURRENT_MAX 130.0 // Current limit in Amperes (Upper)
 #endif
 #ifndef MCCONF_L_CURRENT_MIN
-#define MCCONF_L_CURRENT_MIN -135.0 // Current limit in Amperes (Lower)
+#define MCCONF_L_CURRENT_MIN -130.0 // Current limit in Amperes (Lower)
 #endif
 #ifndef MCCONF_L_IN_CURRENT_MAX
 #define MCCONF_L_IN_CURRENT_MAX 60.0 // Input current limit in Amperes (Upper)
@@ -275,9 +275,9 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT -135.0, 135.0
+#define HW_LIM_CURRENT -150.0, 150.0
 #define HW_LIM_CURRENT_IN -80.0, 100.0
-#define HW_LIM_CURRENT_ABS 0.0, 135.0
+#define HW_LIM_CURRENT_ABS 0.0, 150.0
 #define HW_LIM_VIN 24.0, 76.0
 #define HW_LIM_ERPM -300e3, 300e3
 #define HW_LIM_DUTY_MIN 0.0, 0.1

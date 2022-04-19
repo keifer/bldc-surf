@@ -20,7 +20,7 @@
 #ifndef HW_SPESC_V2_TO263
 #define HW_SPESC_V2_TO263
 
-#define HW_NAME "SPEsc V2(TO-263)"
+#define HW_NAME "SPEsc V2(200A)"
 #define INVERTED_SHUNT_POLARITY
 
 // HW properties

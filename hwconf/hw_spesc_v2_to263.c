@@ -66,15 +66,19 @@ void hw_init_gpio(void)
 					  PAL_STM32_OSPEED_HIGHEST);
 	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
+	EXT_BUZZER_ON();
 	chThdSleepMilliseconds(200);
 	BRAKE_LIGHT_OFF();
 	LIGHT_FWD_OFF();
+	EXT_BUZZER_OFF();
 	chThdSleepMilliseconds(200);
 	LIGHT_FWD_ON();
 	BRAKE_LIGHT_ON();
+	EXT_BUZZER_ON();
 	chThdSleepMilliseconds(200);
 	BRAKE_LIGHT_OFF();
 	LIGHT_FWD_OFF();
+	EXT_BUZZER_OFF();
 #endif
 
 	// power on DC-DC Converter pull high to enable , pull low disable 

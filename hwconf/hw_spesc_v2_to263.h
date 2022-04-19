@@ -28,7 +28,7 @@
 #define HW_USE_INTERNAL_RC
 #define HW_DEAD_TIME_NSEC 1000.0
 #define HW_HAS_LIGHT
-
+#define HW_HAS_NO_CAN
 // Macros
 #define LED_GREEN_ON() palSetPad(GPIOB, 0)
 #define LED_GREEN_OFF() palClearPad(GPIOB, 0)
@@ -244,7 +244,7 @@
 #endif
 
 #ifndef MCCONF_L_MAX_ABS_CURRENT
-#define MCCONF_L_MAX_ABS_CURRENT 120.0 // The maximum absolute current above which a fault is generated
+#define MCCONF_L_MAX_ABS_CURRENT 100.0 // The maximum absolute current above which a fault is generated
 #endif
 
 #ifndef MCCONF_FOC_SAMPLE_V0_V7 
@@ -276,7 +276,7 @@
 #endif
 
 // Setting limits
-#define HW_LIM_CURRENT -100.0, 100.0
+#define HW_LIM_CURRENT -120.0, 120.0
 #define HW_LIM_CURRENT_IN -80.0, 100.0
 #define HW_LIM_CURRENT_ABS 0.0, 120.0
 #define HW_LIM_VIN 24.0, 76.0
